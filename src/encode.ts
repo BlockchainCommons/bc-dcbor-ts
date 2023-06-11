@@ -64,6 +64,7 @@ export function cborData(cbor: CBOR): Uint8Array {
       const flatArrayBytes = arrayBytes.flat();
       const lengthBytes = encodeVarInt(MajorType.Array, array.value.length);
       return new Uint8Array([...lengthBytes, ...flatArrayBytes[0]]);
+    case CBORType.Map:
+      throw new Error("Unimplemented");
   }
-  throw new Error("Unimplemented");
 }
