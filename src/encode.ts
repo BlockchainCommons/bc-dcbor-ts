@@ -110,3 +110,11 @@ export function taggedCbor(tag: CborNumber, value: any): Cbor {
     value: cbor(value),
   };
 }
+
+export function simpleCborValue(value: CborNumber): Cbor {
+  return {
+    isCbor: true,
+    type: MajorType.Simple,
+    value: value,
+  };
+}

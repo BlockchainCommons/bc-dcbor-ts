@@ -1,5 +1,5 @@
 import { cborDebug, cborDiagnostic } from "./debug";
-import { cbor, cborData, encodeCbor, taggedCbor } from "./encode";
+import { cbor, cborData, encodeCbor, simpleCborValue, taggedCbor } from "./encode";
 import { bytesToHex, hexToBytes } from "./data-utils";
 import { extractCbor, getCborInteger, getCborNumber } from "./extract";
 import { decodeCbor } from "./decode";
@@ -34,6 +34,10 @@ describe('encodes and decodes simple values', () => {
 
   test('encodes and decodes null', () => {
     runEncodeDecode(null, 'simple(null)', 'null', 'f6');
+  });
+
+  test('encodes and other simple value', () => {
+    runEncodeDecode(simpleCborValue(100), 'simple(100)', 'simple(100)', 'f864');
   });
 });
 
@@ -199,8 +203,8 @@ describe('encodes and decodes NaN and infinity', () => {
   test('encodes and decodes infinity', () => {
     expect(encodeCbor(Infinity)).toEqual(canonicalInfinityData);
     expect(encodeCbor(-Infinity)).toEqual(canonicalNegativeInfinityData);
-    expect(extractCbor(canonicalInfinityData)).toBe(Infinity);
-    expect(extractCbor(canonicalNegativeInfinityData)).toBe(-Infinity);
+    expect(extractCbor(canonicalInfinityData)).toEqual(Infinity);
+    expect(extractCbor(canonicalNegativeInfinityData)).toEqual(-Infinity);
 
     // Non-canonical +infinities throw
     expect(() => decodeCbor(hexToBytes("fa7f800000"))).toThrowError('Non-canonical encoding');
@@ -209,5 +213,19 @@ describe('encodes and decodes NaN and infinity', () => {
     // Non-canonical -infinities throw
     expect(() => decodeCbor(hexToBytes("faff800000"))).toThrowError('Non-canonical encoding');
     expect(() => decodeCbor(hexToBytes("fbfff0000000000000"))).toThrowError('Non-canonical encoding');
+  });
+});
+
+describe('encodes and decodes sample data', () => {
+  test('encodes and decodes envelope', () => {
+    const alice = taggedCbor(200, taggedCbor(24, "Alice"));
+    const knows = taggedCbor(200, taggedCbor(24, "knows"));
+    const bob = taggedCbor(200, taggedCbor(24, "Bob"));
+    const knowsBob = taggedCbor(200, taggedCbor(221, [knows, bob]));
+    const envelope = taggedCbor(200, [alice, knowsBob]);
+    expect(cborDiagnostic(envelope)).toBe('200([200(24("Alice")), 200(221([200(24("knows")), 200(24("Bob"))]))])');
+    const data = encodeCbor(envelope);
+    expect(bytesToHex(data)).toBe('d8c882d8c8d81865416c696365d8c8d8dd82d8c8d818656b6e6f7773d8c8d81863426f62');
+    expect(decodeCbor(data)).toEqual(envelope);
   });
 });
