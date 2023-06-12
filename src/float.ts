@@ -1,5 +1,9 @@
 import * as byteData from "byte-data";
 
+export function hasFractionalPart(n: number): boolean {
+  return n != Math.floor(n);
+}
+
 export function numberToBinary64(n: number): Uint8Array {
   var data = new Uint8Array(8);
   byteData.packTo(n, { bits: 64, fp: true, be: true }, data);

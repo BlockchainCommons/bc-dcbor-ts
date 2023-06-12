@@ -1,4 +1,5 @@
 import { CBORNumber, isCBORNumber } from "./cbor";
+import { hasFractionalPart } from "./float";
 
 export enum MajorType {
   Unsigned = 0,
@@ -21,7 +22,7 @@ export function encodeVarInt(majorType: MajorType, value: CBORNumber): Uint8Arra
     throw new Error("Value out of range");
   }
   // throw an error if the value is a number with a fractional part.
-  if (typeof value === 'number' && value !== Math.floor(value)) {
+  if (typeof value === 'number' && hasFractionalPart(value)) {
     throw new Error("Value out of range");
   }
   let type = typeBits(majorType);
