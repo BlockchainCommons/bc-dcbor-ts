@@ -15,14 +15,18 @@ export function isCBORNumber(value: any): value is CBORNumber {
   return typeof value === 'number' || typeof value === 'bigint';
 }
 
-export type CBORUnsigned = { type: CBORType.Unsigned, value: CBORNumber };
-export type CBORNegative = { type: CBORType.Negative, value: CBORNumber };
-export type CBORBytes = { type: CBORType.Bytes, value: Uint8Array };
-export type CBORText = { type: CBORType.Text, value: string };
-export type CBORArray = { type: CBORType.Array, value: CBOR[] };
-export type CBORMap = { type: CBORType.Map, value: Map<CBOR, CBOR> };
-export type CBORTagged = { type: CBORType.Tagged, tag: CBORNumber, value: CBOR };
-export type CBORSimple = { type: CBORType.Simple, value: CBORNumber };
+export function isCBOR(value: any): boolean {
+  return value && typeof value === 'object' && 'isCBOR' in value && value.isCBOR === true;
+}
+
+export type CBORUnsigned = { isCBOR: true, type: CBORType.Unsigned, value: CBORNumber };
+export type CBORNegative = { isCBOR: true, type: CBORType.Negative, value: CBORNumber };
+export type CBORBytes = { isCBOR: true, type: CBORType.Bytes, value: Uint8Array };
+export type CBORText = { isCBOR: true, type: CBORType.Text, value: string };
+export type CBORArray = { isCBOR: true, type: CBORType.Array, value: CBOR[] };
+export type CBORMap = { isCBOR: true, type: CBORType.Map, value: Map<CBOR, CBOR> };
+export type CBORTagged = { isCBOR: true, type: CBORType.Tagged, tag: CBORNumber, value: CBOR };
+export type CBORSimple = { isCBOR: true, type: CBORType.Simple, value: CBORNumber };
 
 export type CBOR = CBORUnsigned |
   CBORNegative | CBORBytes | CBORText |
@@ -31,20 +35,9 @@ export type CBOR = CBORUnsigned |
 
 export const CBOR = {
   // The CBOR symbolic value for `false`.
-  false: { type: CBORType.Simple, value: 20 } as CBOR,
+  false: { isCBOR: true, type: CBORType.Simple, value: 0x14 } as CBORSimple,
   // The CBOR symbolic value for `true`.
-  true: { type: CBORType.Simple, value: 21 } as CBOR,
+  true: { isCBOR: true, type: CBORType.Simple, value: 0x15 } as CBORSimple,
   // The CBOR symbolic value for `null`.
-  null: { type: CBORType.Simple, value: 22 } as CBOR,
+  null: { isCBOR: true, type: CBORType.Simple, value: 0x16 } as CBORSimple,
 };
-
-/*```swift
-public extension CBOR {
-    /// The CBOR symbolic value for `false`.
-    static let `false` = Bool.cborFalse
-    /// The CBOR symbolic value for `true`.
-    static let `true` = Bool.cborTrue
-    /// The CBOR symbolic value for `null` (`nil`).
-    static var null = Simple.null.cbor
-}
-```*/

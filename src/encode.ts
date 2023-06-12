@@ -1,15 +1,24 @@
-import { CBOR, CBORType, CBORTagged, CBORArray, isCBORNumber } from "./cbor";
+import { CBOR, CBORType, CBORTagged, CBORArray, isCBORNumber, CBORNumber, isCBOR } from "./cbor";
+import { concatUint8Arrays } from "./data-utils";
 import { MajorType, encodeVarInt } from "./varint";
 
+export interface ToCBOR {
+  toCBOR(): CBOR;
+}
+
 export function cbor(value: any): CBOR {
+  if (isCBOR(value)) {
+    return value;
+  }
+
   if (isCBORNumber(value)) {
     if (value < 0) {
-      return { type: CBORType.Negative, value: value };
+      return { isCBOR: true, type: CBORType.Negative, value: value };
     } else {
-      return { type: CBORType.Unsigned, value: value };
+      return { isCBOR: true, type: CBORType.Unsigned, value: value };
     }
   } else if (typeof value === 'string') {
-    return { type: CBORType.Text, value: value };
+    return { isCBOR: true, type: CBORType.Text, value: value };
   } else if (value === null) {
     return CBOR.null;
   } else if (value === true) {
@@ -17,12 +26,15 @@ export function cbor(value: any): CBOR {
   } else if (value === false) {
     return CBOR.false;
   } else if (Array.isArray(value)) {
-    return { type: CBORType.Array, value: value.map(cbor) };
+    return { isCBOR: true, type: CBORType.Array, value: value.map(cbor) };
   } else if (value instanceof Uint8Array) {
-    return { type: CBORType.Bytes, value: value };
+    return { isCBOR: true, type: CBORType.Bytes, value: value };
   } else if (value instanceof Map) {
-    return { type: CBORType.Map, value: new Map(Array.from(value.entries()).map(([k, v]) => [cbor(k), cbor(v)])) };
+    return { isCBOR: true, type: CBORType.Map, value: new Map(Array.from(value.entries()).map(([k, v]) => [cbor(k), cbor(v)])) };
+  } else if ('toCBOR' in value && typeof value.toCBOR === 'function') {
+    return value.toCBOR();
   }
+
   throw new Error("Not supported");
 }
 
@@ -32,9 +44,9 @@ export function cborData(cbor: CBOR): Uint8Array {
       return encodeVarInt(MajorType.Unsigned, cbor.value);
     case CBORType.Negative:
       if (typeof cbor.value === 'bigint') {
-        return encodeVarInt(MajorType.Negative, 1n - cbor.value);
+        return encodeVarInt(MajorType.Negative, -cbor.value - 1n);
       } else if (typeof cbor.value === 'number') {
-        return encodeVarInt(MajorType.Negative, 1 - cbor.value);
+        return encodeVarInt(MajorType.Negative, -cbor.value - 1);
       }
     case CBORType.Bytes:
       if (cbor.value instanceof Uint8Array) {
@@ -61,10 +73,23 @@ export function cborData(cbor: CBOR): Uint8Array {
     case CBORType.Array:
       const array = cbor as CBORArray;
       const arrayBytes = array.value.map(cborData);
-      const flatArrayBytes = arrayBytes.flat();
+      const flatArrayBytes = concatUint8Arrays(arrayBytes)
       const lengthBytes = encodeVarInt(MajorType.Array, array.value.length);
-      return new Uint8Array([...lengthBytes, ...flatArrayBytes[0]]);
+      return new Uint8Array([...lengthBytes, ...flatArrayBytes]);
     case CBORType.Map:
       throw new Error("Unimplemented");
   }
+}
+
+export function encodeCBOR(value: any): Uint8Array {
+  return cborData(cbor(value));
+}
+
+export function taggedCBOR(tag: CBORNumber, value: any): CBOR {
+  return {
+    isCBOR: true,
+    type: CBORType.Tagged,
+    tag: tag,
+    value: cbor(value),
+  };
 }
