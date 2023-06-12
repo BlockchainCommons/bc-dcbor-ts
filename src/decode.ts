@@ -152,6 +152,8 @@ function decodeCBORInternal(data: DataView): { cbor: CBOR, len: number } {
       switch (varIntLen) {
         case 3:
           // 16-bit float
+          // let v = { n: }
+          // let c = { isCBOR: true, type: CBORType.Simple, value: v };
           throw new Error("TODO");
         case 5:
           // 32-bit float

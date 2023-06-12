@@ -114,3 +114,54 @@ function getUint64(view: DataView, byteOffset: number, littleEndian: boolean): b
   const highWord = littleEndian ? view.getUint32(byteOffset + 4, true) : view.getUint32(byteOffset, false);
   return (BigInt(highWord) << BigInt(32)) + BigInt(lowWord);
 }
+
+export function encodeBitPattern(majorType: MajorType, value: Uint8Array): Uint8Array {
+  const type = typeBits(majorType);
+  const buffer = new ArrayBuffer(value.length + 1);
+  const view = new DataView(buffer);
+  switch (value.length) {
+    case 2:
+      view.setUint8(0, 0x19 | type);
+      view.setUint16(1, value[0] << 8 | value[1]);
+      break;
+    case 4:
+      view.setUint8(0, 0x1a | type);
+      view.setUint32(1, value[0] << 24 | value[1] << 16 | value[2] << 8 | value[3]);
+      break;
+    case 8:
+      view.setUint8(0, 0x1b | type);
+      view.setBigUint64(1,
+        BigInt(value[0]) << 56n |
+        BigInt(value[1]) << 48n |
+        BigInt(value[2]) << 40n |
+        BigInt(value[3]) << 32n |
+        BigInt(value[4]) << 24n |
+        BigInt(value[5]) << 16n |
+        BigInt(value[6]) << 8n |
+        BigInt(value[7])
+      );
+      break;
+  }
+  return new Uint8Array(buffer);
+}
+
+export function decodeBitPattern(data: Uint8Array): Uint8Array {
+  const initialByte = data[0];
+  const majorType = initialByte >> 5;
+  const additionalInfo = initialByte & 0x1f;
+  let length: number;
+  switch (additionalInfo) {
+    case 0x19: // 2-byte additional info
+      length = 2;
+      break;
+    case 0x1a: // 4-byte additional info
+      length = 4;
+      break;
+    case 0x1b: // 8-byte additional info
+      length = 8;
+      break;
+    default:
+      throw new Error("Invalid bit pattern");
+  }
+  return data.subarray(1, 1 + length);
+}

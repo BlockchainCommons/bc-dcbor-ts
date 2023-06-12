@@ -1,6 +1,7 @@
-import { CBOR, CBORType, CBORTagged, CBORArray, isCBORNumber, CBORNumber, isCBOR } from "./cbor";
+import { CBOR, CBORType, CBORTagged, CBORArray, isCBORNumber, CBORNumber, isCBOR, isCBORFloat } from "./cbor";
 import { concatUint8Arrays } from "./data-utils";
-import { MajorType, encodeVarInt } from "./varint";
+import { hasFractionalPart, numberToBinary } from "./float";
+import { MajorType, encodeBitPattern, encodeVarInt } from "./varint";
 
 export interface ToCBOR {
   toCBOR(): CBOR;
@@ -12,7 +13,9 @@ export function cbor(value: any): CBOR {
   }
 
   if (isCBORNumber(value)) {
-    if (value < 0) {
+    if (typeof value === 'number' && hasFractionalPart(value)) {
+      return { isCBOR: true, type: CBORType.Simple, value: { float: value } };
+    } else if (value < 0) {
       return { isCBOR: true, type: CBORType.Negative, value: value };
     } else {
       return { isCBOR: true, type: CBORType.Unsigned, value: value };
@@ -48,17 +51,20 @@ export function cborData(cbor: CBOR): Uint8Array {
       } else if (typeof cbor.value === 'number') {
         return encodeVarInt(MajorType.Negative, -cbor.value - 1);
       }
+      break;
     case CBORType.Bytes:
       if (cbor.value instanceof Uint8Array) {
         const lengthBytes = encodeVarInt(MajorType.Bytes, cbor.value.length);
         return new Uint8Array([...lengthBytes, ...cbor.value]);
       }
+      break;
     case CBORType.Text:
       if (typeof cbor.value === 'string') {
         const utf8Bytes = new TextEncoder().encode(cbor.value);
         const lengthBytes = encodeVarInt(MajorType.Text, utf8Bytes.length);
         return new Uint8Array([...lengthBytes, ...utf8Bytes]);
       }
+      break;
     case CBORType.Tagged:
       const tagged = cbor as CBORTagged;
       if (typeof tagged.tag === 'bigint' || typeof tagged.tag === 'number') {
@@ -66,10 +72,14 @@ export function cborData(cbor: CBOR): Uint8Array {
         const valueBytes = cborData(tagged.value);
         return new Uint8Array([...tagBytes, ...valueBytes]);
       }
+      break;
     case CBORType.Simple:
       if (isCBORNumber(cbor.value)) {
         return encodeVarInt(MajorType.Simple, cbor.value);
+      } else if (isCBORFloat(cbor.value)) {
+        return encodeBitPattern(MajorType.Simple, numberToBinary(cbor.value.float));
       }
+      break;
     case CBORType.Array:
       const array = cbor as CBORArray;
       const arrayBytes = array.value.map(cborData);
@@ -79,6 +89,7 @@ export function cborData(cbor: CBOR): Uint8Array {
     case CBORType.Map:
       throw new Error("Unimplemented");
   }
+  throw new Error("Invalid CBOR");
 }
 
 export function encodeCBOR(value: any): Uint8Array {
