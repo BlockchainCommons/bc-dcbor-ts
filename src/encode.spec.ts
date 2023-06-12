@@ -1,7 +1,8 @@
 import { cborDebug, cborDiagnostic } from "./debug";
-import { cbor, cborData, taggedCBOR } from "./encode";
-import { hexToBytes } from "./data-utils";
-import { extractCBOR } from "./extract";
+import { cbor, cborData, encodeCbor, taggedCbor } from "./encode";
+import { bytesToHex, hexToBytes } from "./data-utils";
+import { extractCbor, getCborInteger, getCborNumber } from "./extract";
+import { decodeCbor } from "./decode";
 
 function runEncode(value: any, expectedDebug: string, expectedDiagnostic: string, expectedHex: string): Uint8Array {
   const c = cbor(value);
@@ -17,7 +18,7 @@ function runEncode(value: any, expectedDebug: string, expectedDiagnostic: string
 
 function runEncodeDecode(value: any, expectedDebug: string, expectedDiagnostic: string, expectedHex: string) {
   const encodedBytes = runEncode(value, expectedDebug, expectedDiagnostic, expectedHex)
-  const decoded = extractCBOR(encodedBytes);
+  const decoded = extractCbor(encodedBytes);
   expect(decoded).toEqual(value);
 }
 
@@ -125,12 +126,50 @@ describe('encodes and decodes various', () => {
   });
 
   test('encodes and decodes a tagged value', () => {
-    runEncodeDecode(taggedCBOR(1, "Hello"), 'tagged(1, text("Hello"))', '1("Hello")', 'c16548656c6c6f');
+    runEncodeDecode(taggedCbor(1, "Hello"), 'tagged(1, text("Hello"))', '1("Hello")', 'c16548656c6c6f');
   });
 });
 
-// describe('encodes and decodes floats', () => {
-//   test('encodes floats to shortest representations', () => {
-//     runEncodeDecode(1.5, 'simple(1.5)', '1.5', 'f93e00');
-//   });
-// });
+describe('encodes and decodes floats', () => {
+  test('encodes floats to shortest representations', () => {
+    runEncodeDecode(1.5, 'simple(1.5)', '1.5', 'f93e00');
+    runEncodeDecode(2345678.25, 'simple(2345678.25)', '2345678.25', 'fa4a0f2b39');
+    runEncodeDecode(1.2, 'simple(1.2)', '1.2', 'fb3ff3333333333333');
+  });
+
+  test('encodes floats with no fractional part as integers if possible', () => {
+    runEncodeDecode(42.0, 'unsigned(42)', '42', '182a');
+    runEncodeDecode(2345678.0, 'unsigned(2345678)', '2345678', '1a0023cace');
+    runEncodeDecode(-2345678.0, 'negative(-2345678)', '-2345678', '3a0023cacd');
+  });
+
+  test('encodes negative zero as integer zero', () => {
+    runEncode(-0.0, 'unsigned(0)', '0', '00');
+  });
+
+  test('coerces integer value to generic number', () => {
+    const n = 42;
+    const c = decodeCbor(encodeCbor(n));
+    const f = getCborNumber(c);
+    expect(f).toBe(n);
+  });
+
+  test('cannot coerce numeric value with fractional part to integer', () => {
+    const n = 42.5;
+    const c = decodeCbor(encodeCbor(n));
+    const f = getCborInteger(c);
+    expect(f).toBe(undefined);
+  });
+
+  test('rejects non-canonical floats', () => {
+    // Non-canonical representation of 1.5 that could be represented at a smaller width.
+    const d = hexToBytes("fb3ff8000000000000");
+    expect(() => decodeCbor(d)).toThrowError('Non-canonical encoding');
+  });
+
+  test('rejects non-canonical ints', () => {
+    // Non-canonical representation of a floating point value that could be represented as an integer.
+    const d = hexToBytes("f94a00");
+    expect(() => decodeCbor(d)).toThrowError('Non-canonical encoding');
+  });
+});

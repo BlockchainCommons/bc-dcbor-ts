@@ -24,3 +24,10 @@ export function concatUint8Arrays(arrays: Uint8Array[]): Uint8Array {
   }
   return result;
 }
+
+export function areUint8ArraysEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  return a.every((value, index) => value === b[index]);
+}

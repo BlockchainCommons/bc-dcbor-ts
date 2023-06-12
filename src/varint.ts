@@ -1,22 +1,11 @@
-import { CBORNumber, isCBORNumber } from "./cbor";
+import { CborNumber, isCborNumber, MajorType } from "./cbor";
 import { hasFractionalPart } from "./float";
-
-export enum MajorType {
-  Unsigned = 0,
-  Negative = 1,
-  Bytes = 2,
-  Text = 3,
-  Array = 4,
-  Map = 5,
-  Tagged = 6,
-  Simple = 7,
-}
 
 function typeBits(t: MajorType): number {
   return t << 5;
 }
 
-export function encodeVarInt(majorType: MajorType, value: CBORNumber): Uint8Array {
+export function encodeVarInt(majorType: MajorType, value: CborNumber): Uint8Array {
   // throw an error if the value is negative.
   if (value < 0) {
     throw new Error("Value out of range");
@@ -27,7 +16,7 @@ export function encodeVarInt(majorType: MajorType, value: CBORNumber): Uint8Arra
   }
   let type = typeBits(majorType);
   // If the value is a `number` or a `bigint` that can be represented as a `number`, convert it to a `number`.
-  if (isCBORNumber(value) && value <= Number.MAX_SAFE_INTEGER) {
+  if (isCborNumber(value) && value <= Number.MAX_SAFE_INTEGER) {
     value = Number(value);
     if (value <= 23) {
       return new Uint8Array([value | type]);
@@ -72,11 +61,11 @@ export function encodeVarInt(majorType: MajorType, value: CBORNumber): Uint8Arra
   }
 }
 
-export function decodeVarIntData(dataView: DataView, offset: number): { majorType: MajorType, value: CBORNumber, offset: number } {
+export function decodeVarIntData(dataView: DataView, offset: number): { majorType: MajorType, value: CborNumber, offset: number } {
   const initialByte = dataView.getUint8(offset);
   const majorType = initialByte >> 5;
   const additionalInfo = initialByte & 0x1f;
-  let value: CBORNumber;
+  let value: CborNumber;
   offset += 1;
   switch (additionalInfo) {
     case 24: // 1-byte additional info
@@ -105,7 +94,7 @@ export function decodeVarIntData(dataView: DataView, offset: number): { majorTyp
   return { majorType, value, offset };
 }
 
-export function decodeVarInt(data: Uint8Array): { majorType: MajorType, value: CBORNumber, offset: number } {
+export function decodeVarInt(data: Uint8Array): { majorType: MajorType, value: CborNumber, offset: number } {
   return decodeVarIntData(new DataView(data.buffer, data.byteOffset, data.byteLength), 0);
 }
 
@@ -145,7 +134,7 @@ export function encodeBitPattern(majorType: MajorType, value: Uint8Array): Uint8
   return new Uint8Array(buffer);
 }
 
-export function decodeBitPattern(data: Uint8Array): Uint8Array {
+export function decodeBitPattern(data: Uint8Array): { majorType: MajorType, bitPattern: Uint8Array} {
   const initialByte = data[0];
   const majorType = initialByte >> 5;
   const additionalInfo = initialByte & 0x1f;
@@ -163,5 +152,5 @@ export function decodeBitPattern(data: Uint8Array): Uint8Array {
     default:
       throw new Error("Invalid bit pattern");
   }
-  return data.subarray(1, 1 + length);
+  return { majorType: majorType, bitPattern: data.subarray(1, 1 + length) };
 }

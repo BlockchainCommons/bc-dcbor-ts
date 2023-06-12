@@ -1,48 +1,48 @@
-export enum CBORType {
-  Unsigned,
-  Negative,
-  Bytes,
-  Text,
-  Array,
-  Map,
-  Tagged,
-  Simple,
+export enum MajorType {
+  Unsigned = 0,
+  Negative = 1,
+  Bytes = 2,
+  Text = 3,
+  Array = 4,
+  Map = 5,
+  Tagged = 6,
+  Simple = 7,
 }
 
-export type CBORNumber = number | bigint;
-export type CBORFloat = { float: number };
+export type CborNumber = number | bigint;
+export type CborFloat = { float: number };
 
-export function isCBORNumber(value: any): value is CBORNumber {
+export function isCborNumber(value: any): value is CborNumber {
   return typeof value === 'number' || typeof value === 'bigint';
 }
 
-export function isCBOR(value: any): boolean {
-  return value && typeof value === 'object' && 'isCBOR' in value && value.isCBOR === true;
+export function isCbor(value: any): boolean {
+  return value && typeof value === 'object' && 'isCbor' in value && value.isCbor === true;
 }
 
-export function isCBORFloat(value: any): value is CBORFloat {
+export function isCborFloat(value: any): value is CborFloat {
   return value && typeof value === 'object' && 'float' in value && typeof value.float === 'number';
 }
 
-export type CBORUnsigned = { isCBOR: true, type: CBORType.Unsigned, value: CBORNumber };
-export type CBORNegative = { isCBOR: true, type: CBORType.Negative, value: CBORNumber };
-export type CBORBytes = { isCBOR: true, type: CBORType.Bytes, value: Uint8Array };
-export type CBORText = { isCBOR: true, type: CBORType.Text, value: string };
-export type CBORArray = { isCBOR: true, type: CBORType.Array, value: CBOR[] };
-export type CBORMap = { isCBOR: true, type: CBORType.Map, value: Map<CBOR, CBOR> };
-export type CBORTagged = { isCBOR: true, type: CBORType.Tagged, tag: CBORNumber, value: CBOR };
-export type CBORSimple = { isCBOR: true, type: CBORType.Simple, value: CBORNumber | CBORFloat };
+export type CborUnsigned = { isCbor: true, type: MajorType.Unsigned, value: CborNumber };
+export type CborNegative = { isCbor: true, type: MajorType.Negative, value: CborNumber };
+export type CborBytes = { isCbor: true, type: MajorType.Bytes, value: Uint8Array };
+export type CborText = { isCbor: true, type: MajorType.Text, value: string };
+export type CborArray = { isCbor: true, type: MajorType.Array, value: Cbor[] };
+export type CborMap = { isCbor: true, type: MajorType.Map, value: Map<Cbor, Cbor> };
+export type CborTagged = { isCbor: true, type: MajorType.Tagged, tag: CborNumber, value: Cbor };
+export type CborSimple = { isCbor: true, type: MajorType.Simple, value: CborNumber | CborFloat };
 
-export type CBOR = CBORUnsigned |
-  CBORNegative | CBORBytes | CBORText |
-  CBORArray | CBORMap | CBORTagged |
-  CBORSimple;
+export type Cbor = CborUnsigned |
+  CborNegative | CborBytes | CborText |
+  CborArray | CborMap | CborTagged |
+  CborSimple;
 
-export const CBOR = {
+export const Cbor = {
   // The CBOR symbolic value for `false`.
-  false: { isCBOR: true, type: CBORType.Simple, value: 0x14 } as CBORSimple,
+  false: { isCbor: true, type: MajorType.Simple, value: 0x14 } as CborSimple,
   // The CBOR symbolic value for `true`.
-  true: { isCBOR: true, type: CBORType.Simple, value: 0x15 } as CBORSimple,
+  true: { isCbor: true, type: MajorType.Simple, value: 0x15 } as CborSimple,
   // The CBOR symbolic value for `null`.
-  null: { isCBOR: true, type: CBORType.Simple, value: 0x16 } as CBORSimple,
+  null: { isCbor: true, type: MajorType.Simple, value: 0x16 } as CborSimple,
 };

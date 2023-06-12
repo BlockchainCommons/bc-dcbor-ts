@@ -1,99 +1,110 @@
-import { CBOR, CBORNumber, CBORType } from "./cbor";
+import { Cbor, CborNumber, MajorType, isCborFloat } from "./cbor";
 import { cborDiagnostic } from "./debug";
-import { decodeCBOR } from "./decode";
+import { decodeCbor } from "./decode";
 
-export function extractCBOR(cbor: CBOR | Uint8Array): any | undefined {
-  let c: CBOR;
+export function extractCbor(cbor: Cbor | Uint8Array): any | undefined {
+  let c: Cbor;
   if (cbor instanceof Uint8Array) {
-    c = decodeCBOR(cbor);
+    c = decodeCbor(cbor);
   } else {
     c = cbor;
   }
   switch (c.type) {
-    case CBORType.Unsigned:
+    case MajorType.Unsigned:
       return c.value;
-    case CBORType.Negative:
+    case MajorType.Negative:
       return c.value;
-    case CBORType.Bytes:
+    case MajorType.Bytes:
       return c.value;
-    case CBORType.Text:
+    case MajorType.Text:
       return c.value;
-    case CBORType.Array:
-      return c.value.map(extractCBOR);
-    case CBORType.Map:
+    case MajorType.Array:
+      return c.value.map(extractCbor);
+    case MajorType.Map:
       throw new Error('TODO');
-    case CBORType.Tagged:
+    case MajorType.Tagged:
       return c;
-    case CBORType.Simple:
-      if (c.value == CBOR.true.value) {
+    case MajorType.Simple:
+      if (c.value == Cbor.true.value) {
         return true;
-      } else if (c.value == CBOR.false.value) {
+      } else if (c.value == Cbor.false.value) {
         return false;
-      } else if (c.value == CBOR.null.value) {
+      } else if (c.value == Cbor.null.value) {
         return null;
+      } else if (isCborFloat(c.value)) {
+        return c.value.float;
       }
-      throw new Error('TODO');
+      return c;
   }
   return undefined;
 }
 
-export function getCBORTagged(cbor: CBOR, tag: number): any | undefined {
-  if (cbor.type == CBORType.Tagged && cbor.tag == tag) {
-    return extractCBOR(cbor.value);
+export function getCborTagged(cbor: Cbor, tag: number): any | undefined {
+  if (cbor.type == MajorType.Tagged && cbor.tag == tag) {
+    return extractCbor(cbor.value);
   }
   return undefined;
 }
 
-export function expectCBORTagged(cbor: CBOR, tag: number): any {
-  let value = getCBORTagged(cbor, tag);
+export function expectCborTagged(cbor: Cbor, tag: number): any {
+  let value = getCborTagged(cbor, tag);
   if (value === undefined) {
     throw new Error(`Expected tagged value ${tag}, got ${cborDiagnostic(cbor)}`);
   }
   return value;
 }
 
-export function getCBORBoolean(cbor: CBOR): boolean | undefined {
-  if (cbor.type == CBORType.Simple) {
-    if (cbor.value == CBOR.true.value) {
+export function getCborBoolean(cbor: Cbor): boolean | undefined {
+  if (cbor.type == MajorType.Simple) {
+    if (cbor.value == Cbor.true.value) {
       return true;
-    } else if (cbor.value == CBOR.false.value) {
+    } else if (cbor.value == Cbor.false.value) {
       return false;
     }
   }
   return undefined;
 }
 
-export function expectCBORBoolean(cbor: CBOR): boolean {
-  let value = getCBORBoolean(cbor);
+export function expectCborBoolean(cbor: Cbor): boolean {
+  let value = getCborBoolean(cbor);
   if (value === undefined) {
     throw new Error(`Expected boolean, got ${cborDiagnostic(cbor)}`);
   }
   return value;
 }
 
-export function getCBORInteger(cbor: CBOR): number | undefined {
-  if (cbor.type == CBORType.Unsigned && typeof cbor.value == 'number') {
+export function getCborInteger(cbor: Cbor): number | undefined {
+  if (cbor.type == MajorType.Unsigned && typeof cbor.value == 'number') {
     return cbor.value;
-  } else if (cbor.type == CBORType.Negative && typeof cbor.value == 'number') {
+  } else if (cbor.type == MajorType.Negative && typeof cbor.value == 'number') {
     return cbor.value;
   }
   return undefined;
 }
 
-export function expectCBORInteger(cbor: CBOR): number {
-  let value = getCBORInteger(cbor);
+export function expectCborInteger(cbor: Cbor): number {
+  let value = getCborInteger(cbor);
   if (value === undefined) {
     throw new Error(`Expected integer, got ${cborDiagnostic(cbor)}`);
   }
   return value;
 }
 
-export function getCBORNumber(cbor: CBOR): CBORNumber | undefined {
-  throw new Error('TODO');
+export function getCborNumber(cbor: Cbor): CborNumber | undefined {
+  switch (cbor.type) {
+    case MajorType.Unsigned:
+      return cbor.value;
+    case MajorType.Negative:
+      return cbor.value;
+    case MajorType.Simple:
+      if (isCborFloat(cbor.value)) {
+        return cbor.value.float;
+      }
+  }
 }
 
-export function expectCBORNumber(cbor: CBOR): CBORNumber {
-  let value = getCBORNumber(cbor);
+export function expectCborNumber(cbor: Cbor): CborNumber {
+  let value = getCborNumber(cbor);
   if (value === undefined) {
     throw new Error(`Expected number, got ${cborDiagnostic(cbor)}`);
   }

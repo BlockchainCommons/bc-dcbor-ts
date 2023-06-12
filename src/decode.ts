@@ -1,8 +1,10 @@
-import { CBOR, CBORNumber, CBORType } from "./cbor";
-import { MajorType } from "./varint";
+import { Cbor, CborNumber, MajorType } from "./cbor";
+import { areUint8ArraysEqual } from "./data-utils";
+import { cborData, encodeCbor } from "./encode";
+import { binary16ToNumber, binary32ToNumber, binary64ToNumber } from "./float";
 
-export function decodeCBOR(data: Uint8Array): CBOR {
-  const {cbor, len} = decodeCBORInternal(new DataView(data.buffer, data.byteOffset, data.byteLength));
+export function decodeCbor(data: Uint8Array): Cbor {
+  const {cbor, len} = decodeCborInternal(new DataView(data.buffer, data.byteOffset, data.byteLength));
   const remaining = data.length - len;
   if (remaining !== 0) {
     throw new Error(`Unused data: ${remaining}`);
@@ -35,14 +37,14 @@ function parseBytes(data: DataView, len: number): DataView {
   return range(data, 0, len);
 }
 
-function parseHeaderVarint(data: DataView): { majorType: MajorType, value: CBORNumber, varIntLen: number } {
+function parseHeaderVarint(data: DataView): { majorType: MajorType, value: CborNumber, varIntLen: number } {
   if (data.byteLength < 1) {
     throw new Error("Underrun");
   }
 
   const { majorType, headerValue } = parseHeader(at(data, 0));
   const dataRemaining = data.byteLength - 1;
-  let value: CBORNumber;
+  let value: CborNumber;
   let varIntLen: number;
   if (headerValue <= 23) {
     value = headerValue;
@@ -100,79 +102,93 @@ function parseHeaderVarint(data: DataView): { majorType: MajorType, value: CBORN
   return { majorType, value, varIntLen };
 }
 
-function decodeCBORInternal(data: DataView): { cbor: CBOR, len: number } {
+function decodeCborInternal(data: DataView): { cbor: Cbor, len: number } {
   if (data.byteLength < 1) {
     throw new Error("Underrun");
   }
-  let { majorType, value, varIntLen } = parseHeaderVarint(data);
+  const { majorType, value, varIntLen } = parseHeaderVarint(data);
   switch (majorType) {
-    case MajorType.Unsigned:
-      return { cbor: { isCBOR: true, type: CBORType.Unsigned, value: value }, len: varIntLen };
-    case MajorType.Negative:
+    case MajorType.Unsigned: {
+      const buf = new Uint8Array(data.buffer, data.byteOffset, varIntLen);
+      checkCanonicalEncoding(value, buf);
+      return { cbor: { isCbor: true, type: MajorType.Unsigned, value: value }, len: varIntLen };
+    } case MajorType.Negative: {
+      let v: CborNumber;
       if (typeof value === 'bigint') {
         if (value == 18446744073709551615n) {
-          return { cbor: { isCBOR: true, type: CBORType.Negative, value: -9223372036854775808n }, len: varIntLen };
+          v = -9223372036854775808n;
         } else {
-          return { cbor: { isCBOR: true, type: CBORType.Negative, value: -value - 1n }, len: varIntLen };
+          v = -value - 1n;
         }
-      } else if (typeof value == 'number') {
-        return { cbor: { isCBOR: true, type: CBORType.Negative, value: -value - 1 }, len: varIntLen };
+      } else {
+        v = -value - 1;
       }
-    case MajorType.Bytes:
-      let dataLen = value;
+      const buf = new Uint8Array(data.buffer, data.byteOffset, varIntLen);
+      checkCanonicalEncoding(v, buf);
+      return { cbor: { isCbor: true, type: MajorType.Negative, value: v }, len: varIntLen };
+    } case MajorType.Bytes: {
+      const dataLen = value;
       if (typeof dataLen === 'bigint') {
         throw new Error("Value out of range")
       }
-      let buf = parseBytes(from(data, varIntLen), dataLen);
-      let bytes = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-      return { cbor: { isCBOR: true, type: CBORType.Bytes, value: bytes }, len: varIntLen + dataLen };
-    case MajorType.Text:
-      let textLen = value;
+      const buf = parseBytes(from(data, varIntLen), dataLen);
+      const bytes = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+      return { cbor: { isCbor: true, type: MajorType.Bytes, value: bytes }, len: varIntLen + dataLen };
+    } case MajorType.Text: {
+      const textLen = value;
       if (typeof textLen === 'bigint') {
         throw new Error("Value out of range")
       }
-      let textBuf = parseBytes(from(data, varIntLen), textLen);
-      let text = new TextDecoder().decode(textBuf);
-      return { cbor: { isCBOR: true, type: CBORType.Text, value: text }, len: varIntLen + textLen };
-    case MajorType.Array:
+      const textBuf = parseBytes(from(data, varIntLen), textLen);
+      const text = new TextDecoder().decode(textBuf);
+      return { cbor: { isCbor: true, type: MajorType.Text, value: text }, len: varIntLen + textLen };
+    } case MajorType.Array: {
       let pos = varIntLen;
-      let items: CBOR[] = [];
+      const items: Cbor[] = [];
       for (let i = 0; i < value; i++) {
-        let { cbor: item, len: itemLen } = decodeCBORInternal(from(data, pos));
+        const { cbor: item, len: itemLen } = decodeCborInternal(from(data, pos));
         items.push(item);
         pos += itemLen;
       }
-      return { cbor: { isCBOR: true, type: CBORType.Array, value: items }, len: pos };
-    case MajorType.Map:
+      return { cbor: { isCbor: true, type: MajorType.Array, value: items }, len: pos };
+    } case MajorType.Map: {
       throw new Error("TODO");
-    case MajorType.Tagged:
-      let { cbor: item, len: itemLen } = decodeCBORInternal(from(data, varIntLen));
-      return { cbor: { isCBOR: true, type: CBORType.Tagged, tag: value, value: item }, len: varIntLen + itemLen };
-    case MajorType.Simple:
+    } case MajorType.Tagged: {
+      const { cbor: item, len: itemLen } = decodeCborInternal(from(data, varIntLen));
+      return { cbor: { isCbor: true, type: MajorType.Tagged, tag: value, value: item }, len: varIntLen + itemLen };
+    } case MajorType.Simple:
       switch (varIntLen) {
-        case 3:
-          // 16-bit float
-          // let v = { n: }
-          // let c = { isCBOR: true, type: CBORType.Simple, value: v };
-          throw new Error("TODO");
-        case 5:
-          // 32-bit float
-          throw new Error("TODO");
-        case 9:
-          // 64-bit float
-          throw new Error("TODO");
-        default:
+        case 3: {
+          const f = binary16ToNumber(new Uint8Array(data.buffer, data.byteOffset + 1, 2));
+          checkCanonicalEncoding(f, new Uint8Array(data.buffer, data.byteOffset, varIntLen));
+          return { cbor: { isCbor: true, type: MajorType.Simple, value: { float: f } }, len: varIntLen };
+        } case 5: {
+          const f = binary32ToNumber(new Uint8Array(data.buffer, data.byteOffset + 1, 4));
+          checkCanonicalEncoding(f, new Uint8Array(data.buffer, data.byteOffset, varIntLen));
+          return { cbor: { isCbor: true, type: MajorType.Simple, value: { float: f } }, len: varIntLen };
+        } case 9: {
+          const f = binary64ToNumber(new Uint8Array(data.buffer, data.byteOffset + 1, 8));
+          checkCanonicalEncoding(f, new Uint8Array(data.buffer, data.byteOffset, varIntLen));
+          return { cbor: { isCbor: true, type: MajorType.Simple, value: { float: f } }, len: varIntLen };
+        } default:
           switch (value) {
             case 20:
-              return { cbor: CBOR.false, len: varIntLen };
+              return { cbor: Cbor.false, len: varIntLen };
             case 21:
-              return { cbor: CBOR.true, len: varIntLen };
+              return { cbor: Cbor.true, len: varIntLen };
             case 22:
-              return { cbor: CBOR.null, len: varIntLen };
+              return { cbor: Cbor.null, len: varIntLen };
             default:
-              return { cbor: { isCBOR: true, type: CBORType.Simple, value: value }, len: varIntLen };
+              return { cbor: { isCbor: true, type: MajorType.Simple, value: value }, len: varIntLen };
           }
       }
   }
   throw new Error("Not implemented");
+}
+
+function checkCanonicalEncoding(f: any, buf: Uint8Array) {
+  const buf2 = encodeCbor(f);
+  if (!areUint8ArraysEqual(buf, buf2)) {
+    throw new Error("Non-canonical encoding");
+  }
 }

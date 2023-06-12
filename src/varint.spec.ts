@@ -1,9 +1,9 @@
-import { CBORNumber, isCBORNumber } from "./cbor";
-import { hexToBytes, bytesToHex } from "./data-utils";
-import { MajorType, encodeVarInt, decodeVarInt } from "./varint";
+import { CborNumber, MajorType, isCborNumber } from "./cbor";
+import { hexToBytes } from "./data-utils";
+import { encodeVarInt, decodeVarInt } from "./varint";
 
 
-function testEncodeDecode(majorType: MajorType, value: CBORNumber, expectedHex: string) {
+function testEncodeDecode(majorType: MajorType, value: CborNumber, expectedHex: string) {
   const expectedBytes = hexToBytes(expectedHex);
   const encodedBytes = encodeVarInt(majorType, value);
 
@@ -11,13 +11,13 @@ function testEncodeDecode(majorType: MajorType, value: CBORNumber, expectedHex: 
   const decoded = decodeVarInt(encodedBytes);
 
   let expectedValue = value;
-  if (isCBORNumber(value) && value <= Number.MAX_SAFE_INTEGER) {
+  if (isCborNumber(value) && value <= Number.MAX_SAFE_INTEGER) {
     expectedValue = Number(value);
   }
   expect(decoded).toEqual({ majorType, value: expectedValue, offset: expectedBytes.length });
 }
 
-function testEncodeDecodeUnsigned(value: CBORNumber, expectedHex: string) {
+function testEncodeDecodeUnsigned(value: CborNumber, expectedHex: string) {
   testEncodeDecode(MajorType.Unsigned, value, expectedHex);
 }
 
