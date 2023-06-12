@@ -14,7 +14,7 @@ export function encodeVarInt(majorType: MajorType, value: CborNumber): Uint8Arra
   if (typeof value === 'number' && hasFractionalPart(value)) {
     throw new Error("Value out of range");
   }
-  let type = typeBits(majorType);
+  const type = typeBits(majorType);
   // If the value is a `number` or a `bigint` that can be represented as a `number`, convert it to a `number`.
   if (isCborNumber(value) && value <= Number.MAX_SAFE_INTEGER) {
     value = Number(value);

@@ -47,7 +47,7 @@ export function getCborTagged(cbor: Cbor, tag: number): any | undefined {
 }
 
 export function expectCborTagged(cbor: Cbor, tag: number): any {
-  let value = getCborTagged(cbor, tag);
+  const value = getCborTagged(cbor, tag);
   if (value === undefined) {
     throw new Error(`Expected tagged value ${tag}, got ${cborDiagnostic(cbor)}`);
   }
@@ -66,7 +66,7 @@ export function getCborBoolean(cbor: Cbor): boolean | undefined {
 }
 
 export function expectCborBoolean(cbor: Cbor): boolean {
-  let value = getCborBoolean(cbor);
+  const value = getCborBoolean(cbor);
   if (value === undefined) {
     throw new Error(`Expected boolean, got ${cborDiagnostic(cbor)}`);
   }
@@ -83,7 +83,7 @@ export function getCborInteger(cbor: Cbor): number | undefined {
 }
 
 export function expectCborInteger(cbor: Cbor): number {
-  let value = getCborInteger(cbor);
+  const value = getCborInteger(cbor);
   if (value === undefined) {
     throw new Error(`Expected integer, got ${cborDiagnostic(cbor)}`);
   }
@@ -104,7 +104,7 @@ export function getCborNumber(cbor: Cbor): CborNumber | undefined {
 }
 
 export function expectCborNumber(cbor: Cbor): CborNumber {
-  let value = getCborNumber(cbor);
+  const value = getCborNumber(cbor);
   if (value === undefined) {
     throw new Error(`Expected number, got ${cborDiagnostic(cbor)}`);
   }

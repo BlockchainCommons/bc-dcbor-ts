@@ -18,7 +18,7 @@ export function cborDebug(cbor: Cbor): string {
     case MajorType.Tagged:
       return `tagged(${cbor.tag}, ${cborDebug(cbor.value)})`;
     case MajorType.Simple:
-      let value = cbor.value;
+      const value = cbor.value;
       if (value == Cbor.true.value) {
         return `simple(true)`;
       } else if (value == Cbor.false.value) {
@@ -52,7 +52,7 @@ export function cborDiagnostic(cbor: Cbor): string {
     case MajorType.Tagged:
       return `${cbor.tag}(${cborDiagnostic(cbor.value)})`;
     case MajorType.Simple:
-      let value = cbor.value;
+      const value = cbor.value;
       if (value == Cbor.true.value) {
         return `true`;
       } else if (value == Cbor.false.value) {
