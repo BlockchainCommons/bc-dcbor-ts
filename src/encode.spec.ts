@@ -3,6 +3,7 @@ import { cbor, cborData, encodeCbor, taggedCbor } from "./encode";
 import { bytesToHex, hexToBytes } from "./data-utils";
 import { extractCbor, getCborInteger, getCborNumber } from "./extract";
 import { decodeCbor } from "./decode";
+import { binary64ToNumber } from "./float";
 
 function runEncode(value: any, expectedDebug: string, expectedDiagnostic: string, expectedHex: string): Uint8Array {
   const c = cbor(value);
@@ -171,5 +172,42 @@ describe('encodes and decodes floats', () => {
     // Non-canonical representation of a floating point value that could be represented as an integer.
     const d = hexToBytes("f94a00");
     expect(() => decodeCbor(d)).toThrowError('Non-canonical encoding');
+  });
+});
+
+const canonicalNaNData = hexToBytes("f97e00");
+const canonicalInfinityData = hexToBytes("f97c00");
+const canonicalNegativeInfinityData = hexToBytes("f9fc00");
+
+describe('encodes and decodes NaN and infinity', () => {
+  test('encodes NaNs uniformly', () => {
+    const nonstandardDoubleNaN = binary64ToNumber(hexToBytes("7ff9100000000001"));
+    expect(isNaN(nonstandardDoubleNaN)).toBe(true);
+    expect(encodeCbor(nonstandardDoubleNaN)).toEqual(canonicalNaNData);
+  });
+
+  test('decodes only canonical NaN', () => {
+    const c = extractCbor(canonicalNaNData);
+    expect(c).toBeNaN();
+
+    // Non-canonical NaNs of any size throw
+    expect(() => decodeCbor(hexToBytes("f97e01"))).toThrowError('Non-canonical encoding');
+    expect(() => decodeCbor(hexToBytes("faffc00001"))).toThrowError('Non-canonical encoding');
+    expect(() => decodeCbor(hexToBytes("fb7ff9100000000001"))).toThrowError('Non-canonical encoding');
+  });
+
+  test('encodes and decodes infinity', () => {
+    expect(encodeCbor(Infinity)).toEqual(canonicalInfinityData);
+    expect(encodeCbor(-Infinity)).toEqual(canonicalNegativeInfinityData);
+    expect(extractCbor(canonicalInfinityData)).toBe(Infinity);
+    expect(extractCbor(canonicalNegativeInfinityData)).toBe(-Infinity);
+
+    // Non-canonical +infinities throw
+    expect(() => decodeCbor(hexToBytes("fa7f800000"))).toThrowError('Non-canonical encoding');
+    expect(() => decodeCbor(hexToBytes("fb7ff0000000000000"))).toThrowError('Non-canonical encoding');
+
+    // Non-canonical -infinities throw
+    expect(() => decodeCbor(hexToBytes("faff800000"))).toThrowError('Non-canonical encoding');
+    expect(() => decodeCbor(hexToBytes("fbfff0000000000000"))).toThrowError('Non-canonical encoding');
   });
 });

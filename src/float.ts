@@ -35,6 +35,9 @@ export function binary16ToNumber(data: Uint8Array): number {
 }
 
 export function numberToBinary(n: number): Uint8Array {
+  if (isNaN(n)) {
+    return new Uint8Array([0x7e, 0x00]);
+  }
   const n32 = numberToBinary32(n);
   const f32 = binary32ToNumber(n32);
   if (f32 == n) {

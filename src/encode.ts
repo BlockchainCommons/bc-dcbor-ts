@@ -13,14 +13,14 @@ export function cbor(value: any): Cbor {
   }
 
   if (isCborNumber(value)) {
-    if (typeof value === 'number' && hasFractionalPart(value)) {
+    if (typeof value === 'number' && isNaN(value)) {
+      return { isCbor: true, type: MajorType.Simple, value: { float: NaN } };
+    } else if (typeof value === 'number' && hasFractionalPart(value)) {
       return { isCbor: true, type: MajorType.Simple, value: { float: value } };
     } else if (value == Infinity) {
       return { isCbor: true, type: MajorType.Simple, value: { float: Infinity } };
     } else if (value == -Infinity) {
       return { isCbor: true, type: MajorType.Simple, value: { float: -Infinity } };
-    } else if (typeof value === 'number' && isNaN(value)) {
-      return { isCbor: true, type: MajorType.Simple, value: { float: NaN } };
     } else if (value < 0) {
       return { isCbor: true, type: MajorType.Negative, value: value };
     } else {
