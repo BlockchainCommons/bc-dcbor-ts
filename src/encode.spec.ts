@@ -1,8 +1,9 @@
 import { cborDebug, cborDiagnostic } from "./debug";
 import { cbor, cborData, taggedCBOR } from "./encode";
 import { hexToBytes } from "./data-utils";
+import { extractCBOR } from "./extract";
 
-function testEncodeDecode(value: any, expectedDebug: string, expectedDiagnostic: string, expectedHex: string) {
+function testEncode(value: any, expectedDebug: string, expectedDiagnostic: string, expectedHex: string): Uint8Array {
   const c = cbor(value);
 
   expect(cborDebug(c)).toEqual(expectedDebug);
@@ -11,6 +12,13 @@ function testEncodeDecode(value: any, expectedDebug: string, expectedDiagnostic:
   const expectedBytes = hexToBytes(expectedHex);
   const encodedBytes = cborData(c);
   expect(encodedBytes).toEqual(expectedBytes);
+  return encodedBytes;
+}
+
+function testEncodeDecode(value: any, expectedDebug: string, expectedDiagnostic: string, expectedHex: string) {
+  const encodedBytes = testEncode(value, expectedDebug, expectedDiagnostic, expectedHex)
+  const decoded = extractCBOR(encodedBytes);
+  expect(decoded).toEqual(value);
 }
 
 describe('encodes and decodes simple values', () => {
@@ -67,9 +75,10 @@ describe('encodes and decodes unsigned', () => {
 });
 
 describe('encodes and decodes negative', () => {
-  test('encodes and decodes negative zero', () => {
-    testEncodeDecode(-0, 'unsigned(0)', '0', '00');
-    testEncodeDecode(-0.0, 'unsigned(0)', '0', '00');
+  // Negative zero encodes as zero
+  test('encodes negative zero', () => {
+    testEncode(-0, 'unsigned(0)', '0', '00');
+    testEncode(-0.0, 'unsigned(0)', '0', '00');
   });
 
   test('encodes and decodes -1 and -2', () => {
@@ -116,7 +125,6 @@ describe('encodes and decodes various', () => {
   });
 
   test('encodes and decodes a tagged value', () => {
-    const tagged = taggedCBOR(1, "Hello");
-    testEncodeDecode(tagged, 'tagged(1, text("Hello"))', '1("Hello")', 'c16548656c6c6f');
+    testEncodeDecode(taggedCBOR(1, "Hello"), 'tagged(1, text("Hello"))', '1("Hello")', 'c16548656c6c6f');
   });
 });
