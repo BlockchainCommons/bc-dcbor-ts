@@ -1,7 +1,8 @@
 import { Cbor, CborNumber, MajorType } from "./cbor";
-import { areUint8ArraysEqual } from "./data-utils";
+import { areBytesEqual } from "./data-utils";
 import { cborData, encodeCbor } from "./encode";
 import { binary16ToNumber, binary32ToNumber, binary64ToNumber } from "./float";
+import { CborMap } from "./map";
 
 export function decodeCbor(data: Uint8Array): Cbor {
   const {cbor, len} = decodeCborInternal(new DataView(data.buffer, data.byteOffset, data.byteLength));
@@ -152,7 +153,16 @@ function decodeCborInternal(data: DataView): { cbor: Cbor, len: number } {
       }
       return { cbor: { isCbor: true, type: MajorType.Array, value: items }, len: pos };
     } case MajorType.Map: {
-      throw new Error("TODO");
+      let pos = varIntLen;
+      const map = new CborMap();
+      for (let i = 0; i < value; i++) {
+        const { cbor: key, len: keyLen } = decodeCborInternal(from(data, pos));
+        pos += keyLen;
+        const { cbor: value, len: valueLen } = decodeCborInternal(from(data, pos));
+        pos += valueLen;
+        map.setNext(key, value);
+      }
+      return { cbor: { isCbor: true, type: MajorType.Map, value: map }, len: pos };
     } case MajorType.Tagged: {
       const { cbor: item, len: itemLen } = decodeCborInternal(from(data, varIntLen));
       return { cbor: { isCbor: true, type: MajorType.Tagged, tag: value, value: item }, len: varIntLen + itemLen };
@@ -183,12 +193,11 @@ function decodeCborInternal(data: DataView): { cbor: Cbor, len: number } {
           }
       }
   }
-  throw new Error("Not implemented");
 }
 
 function checkCanonicalEncoding(f: any, buf: Uint8Array) {
   const buf2 = encodeCbor(f);
-  if (!areUint8ArraysEqual(buf, buf2)) {
+  if (!areBytesEqual(buf, buf2)) {
     throw new Error("Non-canonical encoding");
   }
 }

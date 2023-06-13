@@ -14,7 +14,7 @@ export function cborDebug(cbor: Cbor): string {
     case MajorType.Array:
       return `array([${cbor.value.map(cborDebug).join(', ')}])`;
     case MajorType.Map:
-      return `map(${Array.from(cbor.value.entries()).map(([k, v]) => `${cborDebug(k)}: ${cborDebug(v)}`).join(', ')})`;
+      return cbor.value.debug;
     case MajorType.Tagged:
       return `tagged(${cbor.tag}, ${cborDebug(cbor.value)})`;
     case MajorType.Simple:
@@ -48,7 +48,7 @@ export function cborDiagnostic(cbor: Cbor): string {
     case MajorType.Array:
       return `[${cbor.value.map(cborDiagnostic).join(', ')}]`;
     case MajorType.Map:
-      return `{${Array.from(cbor.value.entries()).map(([k, v]) => `${cborDiagnostic(k)}: ${cborDiagnostic(v)}`).join(', ')}}`;
+      return cbor.value.diagnostic;
     case MajorType.Tagged:
       return `${cbor.tag}(${cborDiagnostic(cbor.value)})`;
     case MajorType.Simple:

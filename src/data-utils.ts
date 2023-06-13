@@ -14,7 +14,7 @@ export function bytesToHex(bytes: Uint8Array): string {
   return hex;
 }
 
-export function concatUint8Arrays(arrays: Uint8Array[]): Uint8Array {
+export function concatBytes(arrays: Uint8Array[]): Uint8Array {
   const totalLength = arrays.reduce((acc, arr) => acc + arr.length, 0);
   const result = new Uint8Array(totalLength);
   let offset = 0;
@@ -25,9 +25,28 @@ export function concatUint8Arrays(arrays: Uint8Array[]): Uint8Array {
   return result;
 }
 
-export function areUint8ArraysEqual(a: Uint8Array, b: Uint8Array): boolean {
+export function areBytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) {
     return false;
   }
   return a.every((value, index) => value === b[index]);
+}
+
+export function lexicographicallyCompareBytes(a: Uint8Array, b: Uint8Array): number {
+  const length = Math.min(a.length, b.length);
+
+  for (let i = 0; i < length; i++) {
+    if (a[i] !== b[i]) {
+      return a[i] < b[i] ? -1 : 1;
+    }
+  }
+
+  if (a.length < b.length) {
+    return -1;
+  }
+  if (a.length > b.length) {
+    return 1;
+  }
+
+  return 0;
 }

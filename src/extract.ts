@@ -21,7 +21,7 @@ export function extractCbor(cbor: Cbor | Uint8Array): any | undefined {
     case MajorType.Array:
       return c.value.map(extractCbor);
     case MajorType.Map:
-      throw new Error('TODO');
+      return c.value;
     case MajorType.Tagged:
       return c;
     case MajorType.Simple:
