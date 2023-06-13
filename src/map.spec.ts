@@ -1,7 +1,7 @@
 import { bytesToHex, hexToBytes } from "./data-utils";
 import { cborDebug, cborDiagnostic } from "./debug";
 import { decodeCbor } from "./decode";
-import { cbor, cborData } from "./encode";
+import { cbor, cborData, cborHex } from "./encode";
 import { extractCbor } from "./extract";
 import { CborMap } from "./map";
 
@@ -52,12 +52,12 @@ describe('CborMap', () => {
   });
 
   test('Anders map', () => {
-    let map = new Map<number, any>([
+    let map = new Map<any, any>([
       [1, 45.7],
       [2, 'Hi there!']
     ]);
-
-    expect(bytesToHex(cborData(map))).toBe('a201fb4046d9999999999a0269486920746865726521')
+    expect(cborHex(map)).toBe('a201fb4046d9999999999a0269486920746865726521')
+    expect(map.get(1)).toBe(45.7);
   });
 
   test('rejects misordered map', () => {

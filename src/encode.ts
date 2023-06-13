@@ -1,5 +1,5 @@
 import { Cbor, MajorType, CborTaggedType, CborArrayType, isCborNumber, CborNumber, isCbor, isCborFloat, CborMapType } from "./cbor";
-import { concatBytes } from "./data-utils";
+import { bytesToHex, concatBytes } from "./data-utils";
 import { hasFractionalPart, numberToBinary } from "./float";
 import { CborMap } from "./map";
 import { encodeBitPattern, encodeVarInt } from "./varint";
@@ -48,6 +48,10 @@ export function cbor(value: Cbor | any): Cbor {
   }
 
   throw new Error("Not supported");
+}
+
+export function cborHex(value: any): string {
+  return bytesToHex(cborData(value));
 }
 
 export function cborData(value: any): Uint8Array {
