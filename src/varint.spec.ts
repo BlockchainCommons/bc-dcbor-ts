@@ -2,7 +2,6 @@ import { CborNumber, MajorType, isCborNumber } from "./cbor";
 import { hexToBytes } from "./data-utils";
 import { encodeVarInt, decodeVarInt } from "./varint";
 
-
 function testEncodeDecode(majorType: MajorType, value: CborNumber, expectedHex: string) {
   const expectedBytes = hexToBytes(expectedHex);
   const encodedBytes = encodeVarInt(majorType, value);

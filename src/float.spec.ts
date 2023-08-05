@@ -56,7 +56,7 @@ describe('encodes and decodes minimal floats', () => {
 });
 
 describe('encodes and decodes CBOR bit patterns', () => {
-  test('encodes and decodes 64-bit CBOR patterms', () => {
+  test('encodes and decodes 64-bit CBOR patterns', () => {
     const a = 1.2;
     const b = numberToBinary(a);
     const c = encodeBitPattern(MajorType.Simple, b);
@@ -68,7 +68,7 @@ describe('encodes and decodes CBOR bit patterns', () => {
     expect(a2).toEqual(a);
   });
 
-  test('encodes and decodes 32-bit CBOR patterms', () => {
+  test('encodes and decodes 32-bit CBOR patterns', () => {
     const a = 2345678.25;
     const b = numberToBinary(a);
     const c = encodeBitPattern(MajorType.Simple, b);
@@ -80,7 +80,7 @@ describe('encodes and decodes CBOR bit patterns', () => {
     expect(a2).toEqual(a);
   });
 
-  test('encodes and decodes 16-bit CBOR patterms', () => {
+  test('encodes and decodes 16-bit CBOR patterns', () => {
     const a = 1.5;
     const b = numberToBinary(a);
     const c = encodeBitPattern(MajorType.Simple, b);

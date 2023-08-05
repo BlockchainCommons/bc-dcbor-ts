@@ -1,4 +1,4 @@
-import { bytesToHex, hexToBytes } from "./data-utils";
+import { hexToBytes } from "./data-utils";
 import { cborDebug, cborDiagnostic } from "./debug";
 import { decodeCbor } from "./decode";
 import { cbor, cborData, cborHex } from "./encode";
