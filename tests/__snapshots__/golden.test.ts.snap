@@ -1,0 +1,67 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`golden wire-format snapshots > encodes: -infinity 1`] = `"f9fc00"`;
+
+exports[`golden wire-format snapshots > encodes: array empty 1`] = `"80"`;
+
+exports[`golden wire-format snapshots > encodes: array heterogeneous 1`] = `"85016374776ff5f6820304"`;
+
+exports[`golden wire-format snapshots > encodes: array ints 1`] = `"83010203"`;
+
+exports[`golden wire-format snapshots > encodes: bool false 1`] = `"f4"`;
+
+exports[`golden wire-format snapshots > encodes: bool true 1`] = `"f5"`;
+
+exports[`golden wire-format snapshots > encodes: bytes 00112233 1`] = `"4400112233"`;
+
+exports[`golden wire-format snapshots > encodes: bytes empty 1`] = `"40"`;
+
+exports[`golden wire-format snapshots > encodes: empty string 1`] = `"60"`;
+
+exports[`golden wire-format snapshots > encodes: float 1.5 1`] = `"f93e00"`;
+
+exports[`golden wire-format snapshots > encodes: float 3.14159 1`] = `"fb400921fb54442d11"`;
+
+exports[`golden wire-format snapshots > encodes: float 100000.0 reduces 1`] = `"1a000186a0"`;
+
+exports[`golden wire-format snapshots > encodes: float whole 42.0 reduces 1`] = `"182a"`;
+
+exports[`golden wire-format snapshots > encodes: infinity 1`] = `"f97c00"`;
+
+exports[`golden wire-format snapshots > encodes: map empty 1`] = `"a0"`;
+
+exports[`golden wire-format snapshots > encodes: map mixed keys (canonical sort) 1`] = `"a50a6374656e18646768756e6472656420636e6567616101617a02"`;
+
+exports[`golden wire-format snapshots > encodes: map with map key 1`] = `"a1a101026a6e65737465642d6b6579"`;
+
+exports[`golden wire-format snapshots > encodes: nan 1`] = `"f97e00"`;
+
+exports[`golden wire-format snapshots > encodes: negative -1 1`] = `"20"`;
+
+exports[`golden wire-format snapshots > encodes: negative -1000 1`] = `"3903e7"`;
+
+exports[`golden wire-format snapshots > encodes: negative big 1`] = `"3bffffffffffffffff"`;
+
+exports[`golden wire-format snapshots > encodes: null 1`] = `"f6"`;
+
+exports[`golden wire-format snapshots > encodes: realistic document 1`] = `"a66269641a000f4240646d657461a26474616773826161616266617574686f7265416c696365657469746c6572496d706f7274616e7420446f63756d656e7466616374697665f56673636f726573831862185718646762616c616e63651bffffffffffffffff"`;
+
+exports[`golden wire-format snapshots > encodes: string hello 1`] = `"6548656c6c6f"`;
+
+exports[`golden wire-format snapshots > encodes: string unicode 1`] = `"6fe38193e38293e381abe381a1e381af"`;
+
+exports[`golden wire-format snapshots > encodes: tagged 1`] = `"c16548656c6c6f"`;
+
+exports[`golden wire-format snapshots > encodes: tagged nested 1`] = `"d864d8c883010203"`;
+
+exports[`golden wire-format snapshots > encodes: uint 24 1`] = `"1818"`;
+
+exports[`golden wire-format snapshots > encodes: uint 1000000 1`] = `"1a000f4240"`;
+
+exports[`golden wire-format snapshots > encodes: uint safe-max 1`] = `"1b001fffffffffffff"`;
+
+exports[`golden wire-format snapshots > encodes: uint small 1`] = `"17"`;
+
+exports[`golden wire-format snapshots > encodes: uint u64::MAX 1`] = `"1bffffffffffffffff"`;
+
+exports[`golden wire-format snapshots > encodes: uint zero 1`] = `"00"`;
