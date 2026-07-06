@@ -1,6 +1,6 @@
 # Blockchain Commons Deterministic CBOR ("dCBOR") for TypeScript
 
-### _by $major-authors_
+### _by Leonardo Custodio_
 
 **`dcbor-ts`** is a [CBOR](https://cbor.io) codec for TypeScript that focuses on writing and parsing _deterministic_ CBOR per IETF [draft-mcnally-deterministic-cbor](https://datatracker.ietf.org/doc/draft-mcnally-deterministic-cbor). It deliberately does **not** support the parts of the CBOR spec that are forbidden by deterministic encoding (such as indefinite-length arrays and maps), and it is strict in both what it writes and what it reads: it returns decoding errors when variable-length integers are not encoded in their minimal form, when CBOR map keys are not in lexicographic order, or when there is extra data past the end of the decoded item.
 
@@ -57,17 +57,17 @@ hexAnnotated(decoded);
 
 Runnable examples live in the [`examples/`](./examples) directory.
 
-## Status - Release Candidate
+## Status - Beta
 
-`bc-dcbor-typescript` is currently under active development and in the alpha testing phase. It should not be used for production tasks until it has had further testing and auditing. See [Blockchain Commons' Development Phases](https://github.com/BlockchainCommons/Community/blob/master/release-path.md).
+`bc-dcbor-typescript` is currently under active development and in the beta testing phase. It should not be used for production tasks until it has had further testing and auditing. See [Blockchain Commons' Development Phases](https://github.com/BlockchainCommons/Community/blob/master/release-path.md).
 
 ### Version History
 
-- **1.0.0-rc.1** - Initial release candidate.
+- **1.0.0-beta.1** - Initial beta implementation.
 
 ### Roadmap
 
-- Continued testing and auditing on the path from release candidate to a stable **1.0.0** release.
+- Continued testing and auditing on the path from beta to a stable **1.0.0** release.
 - Stabilization of the typed-decode API (`CborCodec<T>` / `decodeWith`), currently marked `@beta`.
 - Ongoing tracking of the [draft-mcnally-deterministic-cbor](https://datatracker.ietf.org/doc/draft-mcnally-deterministic-cbor/) specification as it advances through the IETF process.
 - Continued parity with the Rust reference implementation as it evolves (see [`RUST_DIVERGENCES.md`](./RUST_DIVERGENCES.md)).
@@ -84,8 +84,8 @@ Runnable examples live in the [`examples/`](./examples) directory.
 
 This `bc-dcbor-typescript` project is either derived from or was inspired by:
 
-- [BlockchainCommons/bc-dcbor-rust](https://github.com/BlockchainCommons/bc-dcbor-rust) - Repo that does what, by [Wolf McNally](https://github.com/wolfmcnally).
-- [paritytech/bcts](https://github.com/paritytech/bcts) - 
+- [BlockchainCommons/bc-dcbor-rust](https://github.com/BlockchainCommons/bc-dcbor-rust) - The reference rust implementation, by [Wolf McNally](https://github.com/wolfmcnally).
+- [paritytech/bcts](https://github.com/paritytech/bcts) - A TypeScript port covering many Blockchain Commons' implementations, by [Parity Technologies](https://github.com/paritytech).
 
 ## Financial Support
 
