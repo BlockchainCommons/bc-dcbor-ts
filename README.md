@@ -87,22 +87,6 @@ This `bc-dcbor-typescript` project is either derived from or was inspired by:
 - [BlockchainCommons/bc-dcbor-rust](https://github.com/BlockchainCommons/bc-dcbor-rust) - Repo that does what, by [Wolf McNally](https://github.com/wolfmcnally).
 - [paritytech/bcts](https://github.com/paritytech/bcts) - 
 
-## Subsequent Usage
-
-### Used by ...
-
-These are other projects that directly use `$projectname`:
-
-- [community/repo-name/](https://github.com/community/repo-name) - Repo that does what, by [developer](https://github.com/developer)  or from  [community](https://community.com)(use OR fork [version] OR include [version]).
-
-Libraries may be marked as `use` (the current version of our repo is used), `fork` (a specific version of our repo has been forked for usage), or `include` (files from a specific version of our repo have been included).
-
-### Used with ...
-
-These are other projects that work with or leverage `$projectname`:
-
-- [community/repo-name/](https://github.com/community/repo-name) - Repo that does what, by [developer](https://github.com/developer)  or from  [community](https://community.com).
-
 ## Financial Support
 
 `bc-dcbor-typescript` is a project of [Blockchain Commons](https://www.blockchaincommons.com/). We are proudly a "not-for-profit" social benefit corporation committed to open source & open development. Our work is funded entirely by donations and collaborative partnerships with people like you. Every contribution will be spent on building open tools, technologies, and techniques that sustain and advance blockchain and internet security infrastructure and promote an open web.
