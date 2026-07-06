@@ -55,15 +55,7 @@ diagnostic(decoded, { annotate: true });
 hexAnnotated(decoded);
 ```
 
-Key design notes:
-
-- Custom types implement the one structural protocol `ToCbor { toCbor(): Cbor }` (following the `toJSON` precedent).
-- Containers mirror the platform: `CborMap` speaks JS `Map` (`set`/`get`/`has`/`size`/`entries`), `CborSet` speaks JS `Set` (`add`/`has`/`from` + ES2025 algebra). `CborMap.get` returns the stored `Cbor` node - extraction is always explicit at the call site.
-- Typed decode (`@beta`): `decodeWith(bytes, CborDate.codec)` - the only generic bound by a runtime witness.
-- Errors: one taxonomy - `CborError` with code-discriminated `details` (`error.code === "WrongTag"` narrows `error.details.expectedTag`).
-- `String(cborValue)` is a cheap `Cbor(0x…)`; opt into diagnostic-flavored console output with `installDebugHooks()` from `dcbor-ts/debug`.
-
-Formatting and traversal live in subpath entries - `dcbor-ts/diagnostic` (`diagnostic`, `hexAnnotated`), `dcbor-ts/walk` (`walk`), and `dcbor-ts/debug` (`installDebugHooks`) - so decode-only bundles stay small. Decoded byte strings are zero-copy views of the input buffer; call `.slice()` before mutating. Runnable examples live in the [`examples/`](./examples) directory.
+Runnable examples live in the [`examples/`](./examples) directory.
 
 ## Status - Release Candidate
 
@@ -92,7 +84,8 @@ Formatting and traversal live in subpath entries - `dcbor-ts/diagnostic` (`diagn
 
 This `bc-dcbor-typescript` project is either derived from or was inspired by:
 
-- [community/repo-name/](https://github.com/community/repo-name) - Repo that does what, by [developer](https://github.com/developer)  or from  [community](https://community.com).
+- [BlockchainCommons/bc-dcbor-rust](https://github.com/BlockchainCommons/bc-dcbor-rust) - Repo that does what, by [Wolf McNally](https://github.com/wolfmcnally).
+- [paritytech/bcts](https://github.com/paritytech/bcts) - 
 
 ## Subsequent Usage
 
