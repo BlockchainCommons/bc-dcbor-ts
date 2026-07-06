@@ -2,77 +2,105 @@
 
 ### _by $major-authors_
 
-**`$ProjectDescription`** is …
+**`dcbor-ts`** is a [CBOR](https://cbor.io) codec for TypeScript that focuses on writing and parsing _deterministic_ CBOR per IETF [draft-mcnally-deterministic-cbor](https://datatracker.ietf.org/doc/draft-mcnally-deterministic-cbor). It deliberately does **not** support the parts of the CBOR spec that are forbidden by deterministic encoding (such as indefinite-length arrays and maps), and it is strict in both what it writes and what it reads: it returns decoding errors when variable-length integers are not encoded in their minimal form, when CBOR map keys are not in lexicographic order, or when there is extra data past the end of the decoded item.
 
-## Additional Information
-
-The following files contain…
-
-* `$ListOfEssentialDocs`
+The library is ESM-first (with CommonJS support), has **zero runtime dependencies**, and produces **byte-for-byte identical output** to the Rust reference implementation - cross-validated against a ~93k-input differential corpus. Formatting and traversal live in separate subpath entries so decode-only bundles stay lean (~5 kB brotli).
 
 ## Installation Instructions
 
+`dcbor-ts` is published to npm (NOT YET). Install it with your package manager of choice:
+
+```sh
+npm install dcbor-ts
+# or
+pnpm add dcbor-ts
+# or
+yarn add dcbor-ts
+# or
+bun add dcbor-ts
+```
+
+**Requirements:** TypeScript >= 5.7 is required to consume the published types. Node >= 22.12 is required. Runtime code has no dependencies.
+
 ## Usage Instructions
 
-....
+The entire public surface can be introduced in about a minute:
 
-## Status - Alpha
+```typescript
+import {
+  cbor, encodeCbor, decodeCbor, tryDecode, taggedValue,
+  isMap, asText, expectArray, extractCbor, CborMap, CborDate,
+} from "dcbor-ts";
+import { diagnostic, hexAnnotated } from "dcbor-ts/diagnostic";
+
+// Construct: cbor() is the single polymorphic constructor.
+const value = cbor({ name: "Alice", scores: [98, 87], active: true });
+const dated = taggedValue(1, 1675854714); // the only tagged-value constructor
+
+// Encode: deterministic bytes - equal values always encode identically.
+const bytes = encodeCbor(value); // Uint8Array<ArrayBuffer>
+
+// Decode: decodeCbor throws CborError; tryDecode returns a Result.
+const decoded = decodeCbor(bytes);
+const result = tryDecode(bytes); // { ok: true, value } | { ok: false, error }
+
+// Read: fixed prefix semantics.
+isMap(decoded);          // is*     -> type-narrowing boolean guard
+asText(decoded);         // as*     -> T | undefined
+expectArray(decoded);    // expect* -> T, or throws CborError
+extractCbor(decoded);    // explicit native extraction (CborNative)
+
+// Format (subpath - never rides on the value prototype):
+diagnostic(decoded, { annotate: true });
+hexAnnotated(decoded);
+```
+
+Key design notes:
+
+- Custom types implement the one structural protocol `ToCbor { toCbor(): Cbor }` (following the `toJSON` precedent).
+- Containers mirror the platform: `CborMap` speaks JS `Map` (`set`/`get`/`has`/`size`/`entries`), `CborSet` speaks JS `Set` (`add`/`has`/`from` + ES2025 algebra). `CborMap.get` returns the stored `Cbor` node - extraction is always explicit at the call site.
+- Typed decode (`@beta`): `decodeWith(bytes, CborDate.codec)` - the only generic bound by a runtime witness.
+- Errors: one taxonomy - `CborError` with code-discriminated `details` (`error.code === "WrongTag"` narrows `error.details.expectedTag`).
+- `String(cborValue)` is a cheap `Cbor(0x…)`; opt into diagnostic-flavored console output with `installDebugHooks()` from `dcbor-ts/debug`.
+
+Formatting and traversal live in subpath entries - `dcbor-ts/diagnostic` (`diagnostic`, `hexAnnotated`), `dcbor-ts/walk` (`walk`), and `dcbor-ts/debug` (`installDebugHooks`) - so decode-only bundles stay small. Decoded byte strings are zero-copy views of the input buffer; call `.slice()` before mutating. Runnable examples live in the [`examples/`](./examples) directory.
+
+## Status - Release Candidate
 
 `bc-dcbor-typescript` is currently under active development and in the alpha testing phase. It should not be used for production tasks until it has had further testing and auditing. See [Blockchain Commons' Development Phases](https://github.com/BlockchainCommons/Community/blob/master/release-path.md).
 
 ### Version History
 
+- **1.0.0-rc.1** - Initial release candidate.
+
 ### Roadmap
 
-## Origin, Authors, Copyright & Licenses
-
-Unless otherwise noted (either in this [/README.md](./README.md) or in the file's header comments) the contents of this repository are Copyright © 2020 by Blockchain Commons, LLC, and are [licensed](./LICENSE) under the [spdx:BSD-2-Clause Plus Patent License](https://spdx.org/licenses/BSD-2-Clause-Patent.html).
-
-In most cases, the authors, copyright, and license for each file reside in header comments in the source code. When it does not, we have attempted to attribute it accurately in the table below.
-
-This table below also establishes provenance (repository of origin, permalink, and commit id) for files included from repositories that are outside of this repo. Contributors to these files are listed in the commit history for each repository, first with changes found in the commit history of this repo, then in changes in the commit history of their repo of their origin.
-
-| File      | From                                                         | Commit                                                       | Authors & Copyright (c)                                | License                                                     |
-| --------- | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------ | ----------------------------------------------------------- |
-| exception-to-the-rule.c or exception-folder | [https://github.com/community/repo-name/PERMALINK](https://github.com/community/repo-name/PERMALINK) | [https://github.com/community/repo-name/commit/COMMITHASH]() | 2020 Exception Author  | [MIT](https://spdx.org/licenses/MIT)                        |
+- Continued testing and auditing on the path from release candidate to a stable **1.0.0** release.
+- Stabilization of the typed-decode API (`CborCodec<T>` / `decodeWith`), currently marked `@beta`.
+- Ongoing tracking of the [draft-mcnally-deterministic-cbor](https://datatracker.ietf.org/doc/draft-mcnally-deterministic-cbor/) specification as it advances through the IETF process.
+- Continued parity with the Rust reference implementation as it evolves (see [`RUST_DIVERGENCES.md`](./RUST_DIVERGENCES.md)).
 
 ### Dependencies
 
-To build  `bc-dcbor-typescript` you'll need to use the following tools:
+`dcbor-ts` has **zero runtime dependencies**. To build and work on it, you'll need the following tools:
 
-- autotools - Gnu Build System from Free Software Foundation ([intro](https://www.gnu.org/software/automake/manual/html_node/Autotools-Introduction.html)).
-
-Other prerequisites include:
-
-...
-
-### Libraries
-
-The following external libraries are used with `$projectname`:
-
-- [community/repo-name](https://github.com/community/repo-name) — What the library does (use OR fork [version] OR include [version]).
-
-Libraries may be marked as `use` (the current version of the library is used), `fork` (a specific version has been forked to the BCC repos for usage), or `include` (files from a specific version have been included).
+- [Node.js](https://nodejs.org/) >= 22.12 - JavaScript runtime.
+- [Bun](https://bun.sh/) - used in CI to install dependencies and run scripts (any Node-compatible package manager also works).
+- [TypeScript](https://www.typescriptlang.org/) >= 5.7 - language and type checker.
 
 ### Derived from ...
 
 This `bc-dcbor-typescript` project is either derived from or was inspired by:
 
-- [community/repo-name/](https://github.com/community/repo-name) — Repo that does what, by [developer](https://github.com/developer)  or from  [community](https://community.com).
+- [community/repo-name/](https://github.com/community/repo-name) - Repo that does what, by [developer](https://github.com/developer)  or from  [community](https://community.com).
 
 ## Subsequent Usage
-
-### Adapted by ...
-
-These are adaptations, conversions, and wrappers that make `$projectname` available for other languages:
-
-- [community/repo-name/](https://github.com/community/repo-name) — Repo that does what, by [developer](https://github.com/developer)  or from  [community](https://community.com)(language).
 
 ### Used by ...
 
 These are other projects that directly use `$projectname`:
 
-- [community/repo-name/](https://github.com/community/repo-name) — Repo that does what, by [developer](https://github.com/developer)  or from  [community](https://community.com)(use OR fork [version] OR include [version]).
+- [community/repo-name/](https://github.com/community/repo-name) - Repo that does what, by [developer](https://github.com/developer)  or from  [community](https://community.com)(use OR fork [version] OR include [version]).
 
 Libraries may be marked as `use` (the current version of our repo is used), `fork` (a specific version of our repo has been forked for usage), or `include` (files from a specific version of our repo have been included).
 
@@ -80,7 +108,7 @@ Libraries may be marked as `use` (the current version of our repo is used), `for
 
 These are other projects that work with or leverage `$projectname`:
 
-- [community/repo-name/](https://github.com/community/repo-name) — Repo that does what, by [developer](https://github.com/developer)  or from  [community](https://community.com).
+- [community/repo-name/](https://github.com/community/repo-name) - Repo that does what, by [developer](https://github.com/developer)  or from  [community](https://community.com).
 
 ## Financial Support
 
@@ -116,6 +144,9 @@ The following people directly contributed to this repository. You can add your n
 | Name              | Role                | Github                                            | Email                                 | GPG Fingerprint                                    |
 | ----------------- | ------------------- | ------------------------------------------------- | ------------------------------------- | -------------------------------------------------- |
 | Christopher Allen | Principal Architect | [@ChristopherA](https://github.com/ChristopherA) | \<ChristopherA@LifeWithAlacrity.com\> | FDFE 14A5 4ECB 30FC 5D22  74EF F8D3 6C91 3574 05ED |
+| Wolf McNally      | Lead Researcher/Engineer | [@wolfmcnally](https://github.com/wolfmcnally)     | \<Wolf@WolfMcNally.com\>                         | -               |
+| Leonardo Custodio | Maintainer        | [@leonardocustodio](https://github.com/leonardocustodio) | \<Leonardo@Custodio.me\> | _ |
+
 
 ## Responsible Disclosure
 
