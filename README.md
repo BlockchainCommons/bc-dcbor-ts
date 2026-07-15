@@ -8,16 +8,16 @@ The library is ESM-first (with CommonJS support), has **zero runtime dependencie
 
 ## Installation Instructions
 
-`dcbor-ts` is published to npm (NOT YET). Install it with your package manager of choice:
+[@blockchaincommons/dcbor](https://www.npmjs.com/package/@blockchaincommons/dcbor) is published to npm. Install it with your package manager of choice:
 
 ```sh
-npm install bc-dcbor-ts
+npm install @blockchaincommons/dcbor
 # or
-pnpm add bc-dcbor-ts
+pnpm add @blockchaincommons/dcbor
 # or
-yarn add bc-dcbor-ts
+yarn add @blockchaincommons/dcbor
 # or
-bun add bc-dcbor-ts
+bun add @blockchaincommons/dcbor
 ```
 
 **Requirements:** TypeScript >= 5.7 is required to consume the published types. Node >= 22.12 is required. Runtime code has no dependencies.
@@ -30,8 +30,8 @@ The entire public surface can be introduced in about a minute:
 import {
   cbor, encodeCbor, decodeCbor, tryDecode, taggedValue,
   isMap, asText, expectArray, extractCbor, CborMap, CborDate,
-} from "dcbor-ts";
-import { diagnostic, hexAnnotated } from "dcbor-ts/diagnostic";
+} from "@blockchaincommons/dcbor";
+import { diagnostic, hexAnnotated } from "@blockchaincommons/dcbor/diagnostic";
 
 // Construct: cbor() is the single polymorphic constructor.
 const value = cbor({ name: "Alice", scores: [98, 87], active: true });
@@ -59,7 +59,7 @@ Runnable examples live in the [`examples/`](./examples) directory.
 
 ## Status - Beta
 
-`bc-dcbor-typescript` is currently under active development and in beta testing. It should not be used for production tasks until it has had further testing and auditing. See [Blockchain Commons' Development Phases](https://github.com/BlockchainCommons/Community/blob/master/release-path.md).
+`bc-dcbor-ts` is currently under active development and in beta testing. It should not be used for production tasks until it has had further testing and auditing. See [Blockchain Commons' Development Phases](https://github.com/BlockchainCommons/Community/blob/master/release-path.md).
 
 ### Version History
 
@@ -74,7 +74,7 @@ Runnable examples live in the [`examples/`](./examples) directory.
 
 ### Dependencies
 
-`dcbor-ts` has **zero runtime dependencies**. To build and work on it, you'll need the following tools:
+`@blockchaincommons/dcbor` has **zero runtime dependencies**. To build and work on it, you'll need the following tools:
 
 - [Node.js](https://nodejs.org/) >= 22.12 - JavaScript runtime.
 - [Bun](https://bun.sh/) - used in CI to install dependencies and run scripts (any Node-compatible package manager also works).
@@ -82,7 +82,7 @@ Runnable examples live in the [`examples/`](./examples) directory.
 
 ### Derived from ...
 
-This `bc-dcbor-typescript` project is either derived from or was inspired by:
+This `bc-dcbor-ts` project is either derived from or was inspired by:
 
 - [BlockchainCommons/bc-dcbor-rust](https://github.com/BlockchainCommons/bc-dcbor-rust) - The reference rust implementation, by [Wolf McNally](https://github.com/wolfmcnally).
 - [paritytech/bcts](https://github.com/paritytech/bcts) - A TypeScript port covering many Blockchain Commons' implementations, by [Parity Technologies](https://github.com/paritytech).
@@ -91,7 +91,7 @@ This `bc-dcbor-typescript` project is either derived from or was inspired by:
 
 `bc-dcbor-ts` is a project of [Blockchain Commons](https://www.blockchaincommons.com/). We are proudly a "not-for-profit" social benefit corporation committed to open source & open development. Our work is funded entirely by donations and collaborative partnerships with people like you. Every contribution will be spent on building open tools, technologies, and techniques that sustain and advance blockchain and internet security infrastructure and promote an open web.
 
-To financially support further development of `bc-dcbor-typescript` and other projects, please consider becoming a Patron of Blockchain Commons through ongoing monthly patronage as a [GitHub Sponsor](https://github.com/sponsors/BlockchainCommons). You can also support Blockchain Commons with bitcoins at our [BTCPay Server](https://btcpay.blockchaincommons.com/).
+To financially support further development of `bc-dcbor-ts` and other projects, please consider becoming a Patron of Blockchain Commons through ongoing monthly patronage as a [GitHub Sponsor](https://github.com/sponsors/BlockchainCommons). You can also support Blockchain Commons with bitcoins at our [BTCPay Server](https://btcpay.blockchaincommons.com/).
 
 ## Contributing
 

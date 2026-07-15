@@ -4,7 +4,7 @@ import tsParser from "@typescript-eslint/parser";
 import { resolve } from "node:path";
 
 /*
- * Strict, type-checked ESLint flat config for the dcbor-ts library.
+ * Strict, type-checked ESLint flat config for the @blockchaincommons/dcbor library.
  * (Migrated from the @bcts/eslint shared config, inlined here so the package
  * is self-contained.)
  */

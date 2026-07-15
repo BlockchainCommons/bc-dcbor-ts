@@ -97,8 +97,8 @@ export type Cbor = (
  * tag store, or walker.
  *
  * `String(c)`/template literals/`console.log` produce `Cbor(0x…)`. Diagnostic
- * rendering lives in `dcbor-ts/diagnostic`; opt-in diag-flavored debug
- * output lives in `dcbor-ts/debug` (`installDebugHooks()`).
+ * rendering lives in `@blockchaincommons/dcbor/diagnostic`; opt-in diag-flavored debug
+ * output lives in `@blockchaincommons/dcbor/debug` (`installDebugHooks()`).
  */
 // The debug niceties (toStringTag, inspect hook) are PLAIN DATA properties
 // in the literal: defining them afterwards via Object.defineProperty (and
@@ -137,7 +137,7 @@ export const attachMethods = <T extends Omit<Cbor, keyof CborMethods>>(obj: T): 
 
 /**
  * Replace the prototype's inspect/`toJSON` hooks with a richer formatter.
- * Used exclusively by `dcbor-ts/debug`'s `installDebugHooks()`.
+ * Used exclusively by `@blockchaincommons/dcbor/debug`'s `installDebugHooks()`.
  *
  * @internal
  */

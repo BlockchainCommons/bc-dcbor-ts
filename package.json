@@ -1,18 +1,20 @@
 {
-  "name": "dcbor-ts",
-  "version": "1.0.0-rc.2",
+  "name": "@blockchaincommons/dcbor",
+  "version": "1.0.0-beta.1",
   "type": "module",
   "sideEffects": false,
   "description": "Blockchain Commons Deterministic CBOR (dCBOR) for TypeScript",
   "license": "BSD-2-Clause-Patent",
-  "author": "Leonardo Custodio <leonardo@custodio.me> (https://snowpine.io)",
-  "homepage": "https://bcts.dev",
+  "homepage": "https://github.com/BlockchainCommons/bc-dcbor-ts",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/leonardocustodio/dcbor-ts.git"
+    "url": "git+https://github.com/BlockchainCommons/bc-dcbor-ts.git"
   },
   "bugs": {
-    "url": "https://github.com/leonardocustodio/dcbor-ts/issues"
+    "url": "https://github.com/BlockchainCommons/bc-dcbor-ts/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",

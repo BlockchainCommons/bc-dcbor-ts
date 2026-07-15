@@ -1,12 +1,12 @@
 [package]
-name = "dcbor-ts-vector-validation"
+name = "dcbor-vector-validation"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Cross-validates dcbor-ts golden wire vectors against the Rust reference implementation (bc-dcbor-rust)."
+description = "Cross-validates @blockchaincommons/dcbor golden wire vectors against the Rust reference implementation (bc-dcbor-rust)."
 
 [dependencies]
-# The reference implementation dcbor-ts is a port of. Keep the pin in sync
+# The reference implementation @blockchaincommons/dcbor is a port of. Keep the pin in sync
 # with the version the vectors were validated against.
 dcbor = { version = "=0.25.2", features = ["num-bigint"] }
 num-bigint = "0.4.6"

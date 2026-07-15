@@ -2,12 +2,12 @@
  * Public API report via @microsoft/api-extractor (P1.2).
  *
  * Usage:
- *   bun scripts/api-report.mjs --local   # (re)generate api/dcbor-ts.api.md
+ *   bun scripts/api-report.mjs --local   # (re)generate api/dcbor.api.md
  *   bun scripts/api-report.mjs           # verify the committed report matches
  *
  * api-extractor requires a `.d.ts` entry point; tsdown emits `.d.mts`, so a
  * transient copy is made inside dist/ first. The committed report
- * (api/dcbor-ts.api.md) is the reviewable record of the public surface -
+ * (api/dcbor.api.md) is the reviewable record of the public surface -
  * "API deliberately unstable, wire frozen" is enforced by making every
  * surface change a visible diff here and in api/index.d.mts.
  */
@@ -45,14 +45,14 @@ try {
   }
   if (result.apiReportChanged && !local) {
     console.error(
-      "Public API surface changed but api/dcbor-ts.api.md was not updated.\n" +
+      "Public API surface changed but api/dcbor.api.md was not updated.\n" +
         "Review the change, then run `bun run api:snapshot` to accept it.",
     );
     process.exit(1);
   }
   console.log(
     local
-      ? "API report (api/dcbor-ts.api.md) is up to date."
+      ? "API report (api/dcbor.api.md) is up to date."
       : "API report matches the committed snapshot.",
   );
 } finally {

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@bcts/dcbor",
+      "name": "@blockchaincommons/dcbor",
       "devDependencies": {
         "@arethetypeswrong/cli": "^0.18.4",
         "@eslint/js": "^10.0.1",

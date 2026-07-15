@@ -1,7 +1,7 @@
 # Divergences from the Rust reference implementation
 
-`dcbor-ts` is a port of [bc-dcbor-rust](https://github.com/BlockchainCommons/bc-dcbor-rust)
-(crate `dcbor`). Its committed golden wire vectors (`tests/vectors/*.json`)
+`@blockchaincommons/dcbor` is a port of [bc-dcbor-rust](https://github.com/BlockchainCommons/bc-dcbor-rust)
+(crate `dcbor`). It's committed golden wire vectors (`tests/vectors/*.json`)
 have been cross-validated against the Rust reference, **pinned at
 `dcbor = 0.25.2`**, using the harness in `tests/rust-validation/`:
 
@@ -10,7 +10,7 @@ cd tests/rust-validation
 cargo run --release -- ../vectors
 ```
 
-Validation result (2026-07-02, post-Phase-3 fixtures):
+Validation result (2026-07-02):
 
 ```
 encode: 346 vectors - 328 match, 6 emulated-throw, 11 skipped (JS-only), 1 expected-divergence, 0 MISMATCH
@@ -19,10 +19,10 @@ decode: 241 vectors - 236 match, 5 expected-divergence, 0 MISMATCH
 
 (The skipped count grew from 3 to 11 with the Phase-3 wave: the 8
 tombstone-marked fixtures - `tagobjlit/*` and `taggedproto/*` - now expect
-the TS-only directive throw and have no Rust analog to compare; see the
+the TS-only directive throws and has no Rust analog to compare; see the
 updated rows in section 3.)
 
-Every byte the two implementations can both produce is **identical**, and all
+Every byte that the two implementations can both produce is **identical**, and all
 177 decode rejections agree **error-code-for-error-code** - including the
 subtle frozen behaviors that look like porting artifacts but are genuine Rust
 parity:
@@ -53,7 +53,7 @@ wire-behavior change requiring the full vector-suite gate.
 
 ### 1.1 Byte-string/text lengths ≥ 2⁵³ reject with a different error code
 
-| | dcbor-ts | dcbor (Rust) |
+| | @blockchaincommons/dcbor | dcbor (Rust) |
 |---|---|---|
 | `5b0020000000000000` (bstr, length 2⁵³) | `OutOfRange` | `Underrun` |
 | `5bffffffffffffffff` (bstr, length 2⁶⁴−1) | `OutOfRange` | `Underrun` |
@@ -73,7 +73,7 @@ implementations (e.g. `5b0000000100000000`).
 
 ### 1.2 Non-finite date timestamps: TS guards, Rust saturates
 
-| input | dcbor-ts | dcbor (Rust) |
+| input | @blockchaincommons/dcbor | dcbor (Rust) |
 |---|---|---|
 | `CborDate.fromEpochSeconds(NaN)` / `(±Infinity)` (pre-P3.13: `fromTimestamp`) | throws `InvalidDate` ("non-finite timestamp") | `Date::from_timestamp` saturating-casts (NaN → epoch `0`, encodes `c100`) |
 
