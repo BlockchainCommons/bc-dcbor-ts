@@ -2,13 +2,13 @@
 
 ### _by Leonardo Custodio_
 
-**`@blockchaincommons/dcbor`** is a [CBOR](https://cbor.io) codec for TypeScript that focuses on writing and parsing _deterministic_ CBOR per IETF [draft-mcnally-deterministic-cbor](https://datatracker.ietf.org/doc/draft-mcnally-deterministic-cbor). It deliberately does **not** support the parts of the CBOR spec that are forbidden by deterministic encoding (such as indefinite-length arrays and maps), and it is strict in both what it writes and what it reads: it returns decoding errors when variable-length integers are not encoded in their minimal form, when CBOR map keys are not in lexicographic order, or when there is extra data past the end of the decoded item.
+**`bc-dcbor-ts`** is a [CBOR](https://cbor.io) codec for TypeScript that focuses on writing and parsing _deterministic_ CBOR per IETF [draft-mcnally-deterministic-cbor](https://datatracker.ietf.org/doc/draft-mcnally-deterministic-cbor). It deliberately does **not** support the parts of the CBOR spec that are forbidden by deterministic encoding (such as indefinite-length arrays and maps), and it is strict in both what it writes and what it reads: it returns decoding errors when variable-length integers are not encoded in their minimal form, when CBOR map keys are not in lexicographic order, or when there is extra data past the end of the decoded item.
 
 The library is ESM-first (with CommonJS support), has **zero runtime dependencies**, and produces **byte-for-byte identical output** to the Rust reference implementation.
 
 ## Installation Instructions
 
-`@blockchaincommons/dcbor` is published to NPM (SOON). Install it with your package manager of choice:
+[@blockchaincommons/dcbor](https://www.npmjs.com/package/@blockchaincommons/dcbor) is published to npm. Install it with your package manager of choice:
 
 ```sh
 npm install @blockchaincommons/dcbor
@@ -59,7 +59,7 @@ Runnable examples live in the [`examples/`](./examples) directory.
 
 ## Status - Beta
 
-`@blockchaincommons/dcbor` is currently under active development and in beta testing. It should not be used for production tasks until it has had further testing and auditing. See [Blockchain Commons' Development Phases](https://github.com/BlockchainCommons/Community/blob/master/release-path.md).
+`bc-dcbor-ts` is currently under active development and in beta testing. It should not be used for production tasks until it has had further testing and auditing. See [Blockchain Commons' Development Phases](https://github.com/BlockchainCommons/Community/blob/master/release-path.md).
 
 ### Version History
 
@@ -82,16 +82,16 @@ Runnable examples live in the [`examples/`](./examples) directory.
 
 ### Derived from ...
 
-This `@blockchaincommons/dcbor` project is either derived from or was inspired by:
+This `bc-dcbor-ts` project is either derived from or was inspired by:
 
 - [BlockchainCommons/bc-dcbor-rust](https://github.com/BlockchainCommons/bc-dcbor-rust) - The reference rust implementation, by [Wolf McNally](https://github.com/wolfmcnally).
 - [paritytech/bcts](https://github.com/paritytech/bcts) - A TypeScript port covering many Blockchain Commons' implementations, by [Parity Technologies](https://github.com/paritytech).
 
 ## Financial Support
 
-`@blockchaincommons/dcbor` is a project of [Blockchain Commons](https://www.blockchaincommons.com/). We are proudly a "not-for-profit" social benefit corporation committed to open source & open development. Our work is funded entirely by donations and collaborative partnerships with people like you. Every contribution will be spent on building open tools, technologies, and techniques that sustain and advance blockchain and internet security infrastructure and promote an open web.
+`bc-dcbor-ts` is a project of [Blockchain Commons](https://www.blockchaincommons.com/). We are proudly a "not-for-profit" social benefit corporation committed to open source & open development. Our work is funded entirely by donations and collaborative partnerships with people like you. Every contribution will be spent on building open tools, technologies, and techniques that sustain and advance blockchain and internet security infrastructure and promote an open web.
 
-To financially support further development of `@blockchaincommons/dcbor` and other projects, please consider becoming a Patron of Blockchain Commons through ongoing monthly patronage as a [GitHub Sponsor](https://github.com/sponsors/BlockchainCommons). You can also support Blockchain Commons with bitcoins at our [BTCPay Server](https://btcpay.blockchaincommons.com/).
+To financially support further development of `bc-dcbor-ts` and other projects, please consider becoming a Patron of Blockchain Commons through ongoing monthly patronage as a [GitHub Sponsor](https://github.com/sponsors/BlockchainCommons). You can also support Blockchain Commons with bitcoins at our [BTCPay Server](https://btcpay.blockchaincommons.com/).
 
 ## Contributing
 
