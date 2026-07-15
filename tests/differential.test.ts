@@ -58,6 +58,29 @@ const EXPECTED_TOMBSTONES = new Map<"P3.5" | "P3.7", string>([
   ["P3.7", "Custom"],
 ]);
 
+type DecodeDiffOutcome =
+  | { ok: true; hex: string }
+  | { ok: false; code: string; stage?: string };
+
+/**
+ * Deliberate decode-behavior change landed AFTER the frozen baseline:
+ * byte-string/text lengths >= 2^53 (bigint after narrowing) now report
+ * `Underrun` like Rust's usize bounds check instead of the baseline's
+ * `OutOfRange` input guard - see RUST_DIVERGENCES.md. Both builds still
+ * reject; only the code differs. The baseline's decode stage raised
+ * OutOfRange ONLY from that bigint-length guard (asserted by the golden
+ * fixture hygiene test), so this exact code pair - and nothing else - is
+ * the signature of the change. Fold into the baseline at the next
+ * deliberate re-baseline.
+ */
+const isKnownLengthCodeChange = (base: DecodeDiffOutcome, cur: DecodeDiffOutcome): boolean =>
+  !base.ok &&
+  !cur.ok &&
+  base.stage === "decode" &&
+  cur.stage === "decode" &&
+  base.code === "OutOfRange" &&
+  cur.code === "Underrun";
+
 /**
  * Integrity pin for the frozen baseline. Without this, an accidental
  * re-baseline (or a build/copy mishap) silently turns the differential into
@@ -169,7 +192,10 @@ describe("differential corpus: baseline vs working tree", () => {
           const encoded = hexToBytes(base.hex);
           const baseDec = decodeOutcome(baseline, encoded.slice());
           const curDec = decodeOutcome(current, encoded.slice());
-          if (JSON.stringify(baseDec) !== JSON.stringify(curDec)) {
+          if (
+            JSON.stringify(baseDec) !== JSON.stringify(curDec) &&
+            !isKnownLengthCodeChange(baseDec, curDec)
+          ) {
             report(
               name,
               `decode: baseline ${outcomeStr(baseDec)} != current ${outcomeStr(curDec)}`,
@@ -185,7 +211,10 @@ describe("differential corpus: baseline vs working tree", () => {
             for (const [mutName, mutated] of mutations(encoded)) {
               const baseMut = decodeOutcome(baseline, mutated.slice());
               const curMut = decodeOutcome(current, mutated.slice());
-              if (JSON.stringify(baseMut) !== JSON.stringify(curMut)) {
+              if (
+                JSON.stringify(baseMut) !== JSON.stringify(curMut) &&
+                !isKnownLengthCodeChange(baseMut, curMut)
+              ) {
                 report(
                   `${name}/${mutName}`,
                   `on ${bytesToHex(mutated).slice(0, 48)}: baseline ${outcomeStr(baseMut)} != current ${outcomeStr(curMut)}`,
@@ -218,7 +247,7 @@ describe("differential corpus: baseline vs working tree", () => {
       const bytes = hexToBytes(hex);
       const base = decodeOutcome(baseline, bytes.slice());
       const cur = decodeOutcome(current, bytes.slice());
-      if (JSON.stringify(base) !== JSON.stringify(cur)) {
+      if (JSON.stringify(base) !== JSON.stringify(cur) && !isKnownLengthCodeChange(base, cur)) {
         failures.push(`${name}: baseline ${outcomeStr(base)} != current ${outcomeStr(cur)}`);
       }
     }

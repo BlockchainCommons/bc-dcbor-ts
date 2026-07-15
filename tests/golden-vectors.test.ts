@@ -144,7 +144,8 @@ describe("golden decode vectors (accept/reject + error codes)", () => {
 
 describe("golden vector fixture hygiene", () => {
   it("every CborError code that decode can raise has at least one reject vector", () => {
-    // OutOfRange is reachable only via bigint byte-string/text lengths;
+    // Bigint byte-string/text lengths (>= 2^53) report Underrun like every
+    // other missing body - Rust parity - so OutOfRange is not decode-reachable;
     // WrongTag/WrongType/MissingMapKey/InvalidString/InvalidDate/Custom are
     // extraction/construction-layer codes that decodeCbor itself never throws.
     const decodeReachable = [
@@ -157,7 +158,6 @@ describe("golden vector fixture hygiene", () => {
       "UnusedData",
       "MisorderedMapKey",
       "DuplicateMapKey",
-      "OutOfRange",
     ];
     const covered = new Set(
       decodeVectors.filter((v) => !v.expect.ok).map((v) => (v.expect as { code: string }).code),

@@ -10,11 +10,11 @@ cd tests/rust-validation
 cargo run --release -- ../vectors
 ```
 
-Validation result (2026-07-02):
+Validation result (2026-07-15):
 
 ```
 encode: 346 vectors - 328 match, 6 emulated-throw, 11 skipped (JS-only), 1 expected-divergence, 0 MISMATCH
-decode: 241 vectors - 236 match, 5 expected-divergence, 0 MISMATCH
+decode: 241 vectors - 241 match, 0 expected-divergence, 0 MISMATCH
 ```
 
 (The skipped count grew from 3 to 11 with the Phase-3 wave: the 8
@@ -51,27 +51,15 @@ input but deliberately (or incidentally) behave differently. They are frozen
 TS behavior: the API redesign must preserve them, and any change is a
 wire-behavior change requiring the full vector-suite gate.
 
-### 1.1 Byte-string/text lengths ≥ 2⁵³ reject with a different error code
+(A former entry here - byte-string/text lengths ≥ 2⁵³ rejecting with
+`OutOfRange` where Rust reports `Underrun` - was eliminated: the decoder now
+treats an unsatisfiable bigint length as the missing-body condition it is and
+throws `Underrun`, exactly like Rust's `usize` bounds check. The decode side
+is now 100% error-code-identical, and `OutOfRange` is no longer
+decode-reachable at all. The differential harness records the baseline's old
+code pair in `isKnownLengthCodeChange`.)
 
-| | @blockchaincommons/dcbor | dcbor (Rust) |
-|---|---|---|
-| `5b0020000000000000` (bstr, length 2⁵³) | `OutOfRange` | `Underrun` |
-| `5bffffffffffffffff` (bstr, length 2⁶⁴−1) | `OutOfRange` | `Underrun` |
-| `7b0020000000000000` (text, length 2⁵³) | `OutOfRange` | `Underrun` |
-| `7bffffffffffffffff` (text, length 2⁶⁴−1) | `OutOfRange` | `Underrun` |
-| `82005b0020000000000000` (nested) | `OutOfRange` | `Underrun` |
-
-**Why:** the TS decoder narrows 8-byte length arguments through JS bigints
-(`narrowInteger`); a length that stays a bigint (> `Number.MAX_SAFE_INTEGER`)
-hits an explicit `typeof value === "bigint"` guard and throws `OutOfRange`
-*before* attempting the body read. Rust takes the length as `usize` and fails
-the body bounds check with `Underrun`. Both reject; only the code differs.
-Lengths in `[2³², 2⁵³)` are plain JS numbers and produce `Underrun` in both
-implementations (e.g. `5b0000000100000000`).
-
-**Affected vectors:** `reject/OutOfRange/*` (5 decode vectors).
-
-### 1.2 Non-finite date timestamps: TS guards, Rust saturates
+### 1.1 Non-finite date timestamps: TS guards, Rust saturates
 
 | input | @blockchaincommons/dcbor | dcbor (Rust) |
 |---|---|---|

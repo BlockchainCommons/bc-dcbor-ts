@@ -33,29 +33,6 @@ use sha2::{Digest, Sha256};
 /// outcome, reason). Anything diverging outside this list is a MISMATCH.
 fn expected_divergences() -> BTreeMap<&'static str, (&'static str, &'static str)> {
     BTreeMap::from([
-        // TS narrows 8-byte length heads through JS bigints and rejects
-        // lengths >= 2^53 with OutOfRange before attempting the body read;
-        // Rust takes the length as usize and hits the body bounds check.
-        (
-            "reject/OutOfRange/5b0020000000000000",
-            ("throw Underrun", "JS bigint length narrowing vs usize"),
-        ),
-        (
-            "reject/OutOfRange/5bffffffffffffffff",
-            ("throw Underrun", "JS bigint length narrowing vs usize"),
-        ),
-        (
-            "reject/OutOfRange/7b0020000000000000",
-            ("throw Underrun", "JS bigint length narrowing vs usize"),
-        ),
-        (
-            "reject/OutOfRange/7bffffffffffffffff",
-            ("throw Underrun", "JS bigint length narrowing vs usize"),
-        ),
-        (
-            "reject/OutOfRange/82005b0020000000000000",
-            ("throw Underrun", "JS bigint length narrowing vs usize"),
-        ),
         // TS CborDate.fromTimestamp throws InvalidDate for non-finite input;
         // Rust from_timestamp saturating-casts (NaN -> epoch 0).
         (
