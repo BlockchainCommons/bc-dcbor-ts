@@ -59,7 +59,7 @@ class ByteReader {
  * @throws {CborError} `Underrun` | `UnsupportedHeaderValue` |
  *   `NonCanonicalNumeric` | `InvalidSimpleValue` | `InvalidUtf8` |
  *   `NonCanonicalString` | `UnusedData` | `MisorderedMapKey` |
- *   `DuplicateMapKey` | `OutOfRange` - see {@link CborErrorDetailsByCode}.
+ *   `DuplicateMapKey` - see {@link CborErrorDetailsByCode}.
  * @public
  *
  * @remarks Decoded byte strings are zero-copy views aliasing the input
@@ -208,7 +208,10 @@ function readCbor(reader: ByteReader): Cbor {
     }
     case MajorType.ByteString: {
       if (typeof value === "bigint") {
-        throw CborError.outOfRange();
+        // A length >= 2^53 stays a bigint after narrowing; no input can ever
+        // satisfy it, so report the missing body exactly like Rust's usize
+        // bounds check does.
+        throw CborError.underrun();
       }
       if (reader.remaining < value) {
         throw CborError.underrun();
@@ -219,7 +222,8 @@ function readCbor(reader: ByteReader): Cbor {
     }
     case MajorType.Text: {
       if (typeof value === "bigint") {
-        throw CborError.outOfRange();
+        // Same as ByteString: an unsatisfiable bigint length is an Underrun.
+        throw CborError.underrun();
       }
       if (reader.remaining < value) {
         throw CborError.underrun();

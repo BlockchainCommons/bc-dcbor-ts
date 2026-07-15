@@ -16,7 +16,7 @@ import { _ as Result, a as SummarizerResult, c as getGlobalTagsStore, d as CborE
 * @throws {CborError} `Underrun` | `UnsupportedHeaderValue` |
 *   `NonCanonicalNumeric` | `InvalidSimpleValue` | `InvalidUtf8` |
 *   `NonCanonicalString` | `UnusedData` | `MisorderedMapKey` |
-*   `DuplicateMapKey` | `OutOfRange` - see {@link CborErrorDetailsByCode}.
+*   `DuplicateMapKey` - see {@link CborErrorDetailsByCode}.
 * @public
 *
 * @remarks Decoded byte strings are zero-copy views aliasing the input

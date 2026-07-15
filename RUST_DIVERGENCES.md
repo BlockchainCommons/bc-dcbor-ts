@@ -10,17 +10,12 @@ cd tests/rust-validation
 cargo run --release -- ../vectors
 ```
 
-Validation result (2026-07-02):
+Validation result (2026-07-15):
 
 ```
 encode: 346 vectors - 328 match, 6 emulated-throw, 11 skipped (JS-only), 1 expected-divergence, 0 MISMATCH
-decode: 241 vectors - 236 match, 5 expected-divergence, 0 MISMATCH
+decode: 241 vectors - 241 match, 0 expected-divergence, 0 MISMATCH
 ```
-
-(The skipped count grew from 3 to 11 with the Phase-3 wave: the 8
-tombstone-marked fixtures - `tagobjlit/*` and `taggedproto/*` - now expect
-the TS-only directive throws and has no Rust analog to compare; see the
-updated rows in section 3.)
 
 Every byte that the two implementations can both produce is **identical**, and all
 177 decode rejections agree **error-code-for-error-code** - including the
@@ -51,31 +46,11 @@ input but deliberately (or incidentally) behave differently. They are frozen
 TS behavior: the API redesign must preserve them, and any change is a
 wire-behavior change requiring the full vector-suite gate.
 
-### 1.1 Byte-string/text lengths ≥ 2⁵³ reject with a different error code
-
-| | @blockchaincommons/dcbor | dcbor (Rust) |
-|---|---|---|
-| `5b0020000000000000` (bstr, length 2⁵³) | `OutOfRange` | `Underrun` |
-| `5bffffffffffffffff` (bstr, length 2⁶⁴−1) | `OutOfRange` | `Underrun` |
-| `7b0020000000000000` (text, length 2⁵³) | `OutOfRange` | `Underrun` |
-| `7bffffffffffffffff` (text, length 2⁶⁴−1) | `OutOfRange` | `Underrun` |
-| `82005b0020000000000000` (nested) | `OutOfRange` | `Underrun` |
-
-**Why:** the TS decoder narrows 8-byte length arguments through JS bigints
-(`narrowInteger`); a length that stays a bigint (> `Number.MAX_SAFE_INTEGER`)
-hits an explicit `typeof value === "bigint"` guard and throws `OutOfRange`
-*before* attempting the body read. Rust takes the length as `usize` and fails
-the body bounds check with `Underrun`. Both reject; only the code differs.
-Lengths in `[2³², 2⁵³)` are plain JS numbers and produce `Underrun` in both
-implementations (e.g. `5b0000000100000000`).
-
-**Affected vectors:** `reject/OutOfRange/*` (5 decode vectors).
-
-### 1.2 Non-finite date timestamps: TS guards, Rust saturates
+### 1.1 Non-finite date timestamps: TS guards, Rust saturates
 
 | input | @blockchaincommons/dcbor | dcbor (Rust) |
 |---|---|---|
-| `CborDate.fromEpochSeconds(NaN)` / `(±Infinity)` (pre-P3.13: `fromTimestamp`) | throws `InvalidDate` ("non-finite timestamp") | `Date::from_timestamp` saturating-casts (NaN → epoch `0`, encodes `c100`) |
+| `CborDate.fromEpochSeconds(NaN)` / `(±Infinity)` (`fromTimestamp`) | throws `InvalidDate` ("non-finite timestamp") | `Date::from_timestamp` saturating-casts (NaN → epoch `0`, encodes `c100`) |
 
 **Why:** the TS port added an explicit finiteness guard; Rust's
 `Date::from_timestamp` does `trunc() as i64` / `fract() * 1e9 as u32`, and Rust
@@ -118,11 +93,11 @@ matches Rust exactly; only the input-side convenience/coercion is TS-specific.
 | lone surrogate strings (`"\ud800"`) | U+FFFD replacement (`63efbfbd` for the 3-byte text) | JS `TextEncoder` replacement semantics; Rust `String` cannot hold lone surrogates. `str/lone-surrogate-becomes-replacement` |
 | JS `Set` input | plain array in **insertion order** (SameValueZero dedup) | unlike `CborSet` (canonical sort + dedup), which matches Rust `Set` exactly. `jsset/*` |
 | JS `Map` / plain-object input | `CborMap` → canonical key-byte order, duplicate canonical keys last-write-wins | Rust `Map::insert` behaves identically once constructed. `jsmap/*`, `obj/*` |
-| `{tag: T, value: V}` two-own-key literal | **throws directive `Custom` since P3.5** (was: `to_tagged_value(T, V)` bytes) | TS-only tombstone; skipped by the Rust harness. `tagobjlit/*` |
+| `{tag: T, value: V}` two-own-key literal | **throws directive `Custom`** (was: `to_tagged_value(T, V)` bytes) | TS-only tombstone; skipped by the Rust harness. `tagobjlit/*` |
 | objects with inherited `tag`/`value` (prototype) | plain-object→map of OWN keys only | freezes the sniffing arm's own-keys boundary. `protoobj/*` |
-| `toCbor()` protocol objects | the underlying value's bytes | the ONE encode protocol post-P3.7. `tocbor/*` |
-| `taggedCbor()`-only objects | **throws directive `Custom` since P3.7** (was: auto-wrapped) | TS-only tombstone; skipped by the Rust harness. `taggedproto/*` |
-| objects with BOTH protocols | `["toCbor-won", inner]` bytes - **`toCbor` wins since P3.7** (was: `taggedCbor` won) | the harness mirrors the new precedence. `bothproto/*` |
+| `toCbor()` protocol objects | the underlying value's bytes | the ONE encode protocol. `tocbor/*` |
+| `taggedCbor()`-only objects | **throws directive `Custom`** (was: auto-wrapped) | TS-only tombstone; skipped by the Rust harness. `taggedproto/*` |
+| objects with BOTH protocols | `["toCbor-won", inner]` bytes - **`toCbor` wins** (was: `taggedCbor` won) | the harness mirrors the new precedence. `bothproto/*` |
 | `cbor(bigint)` outside `[-(2⁶⁴), 2⁶⁴−1]` | throws `OutOfRange` | Rust cannot express this input: it has **no** `i128`/`u128 → CBOR` conversion (its own tests construct via `CBORCase`), so the range guard is TS surface behavior. The in-range bigint bytes match Rust's `CBORCase::Unsigned`/`Negative` exactly. `int/2^64-bigint-throws`, `int/below-cbor-int-min-throws` |
 | `biguintToCbor(negative)` | throws `OutOfRange` | Rust's `From<BigUint>` cannot receive a negative - type-level in Rust, runtime guard in TS. `biguint/negative-throws` |
 | number vs bigint input forms | JS `number` follows Rust's `From<f64>` semantics; JS `bigint` follows `CBORCase` integer construction | e.g. the **number** literal `18446744073709551615` is the double 2⁶⁴ → float `fa5f800000` in both (`From<f64>` parity), while `18446744073709551615n` → `1bffffffffffffffff`. `int/u64-max-as-number-is-float` |
@@ -141,6 +116,6 @@ bare `YYYY-MM-DD`, and both reject the same malformed inputs
   add it to `expected_divergences()` in `tests/rust-validation/src/main.rs`
   in the same change.
 - **Re-run the cross-validation** after every fixture regeneration
-  (`bun run vectors:generate`) and at the P4.1 proof re-baseline.
+  (`bun run vectors:generate`) at proof re-baseline.
 - **Version pin:** the harness pins `dcbor = 0.25.2`. When bumping, re-run
   and update the header of this file with the new result line.
