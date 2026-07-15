@@ -17,11 +17,6 @@ encode: 346 vectors - 328 match, 6 emulated-throw, 11 skipped (JS-only), 1 expec
 decode: 241 vectors - 241 match, 0 expected-divergence, 0 MISMATCH
 ```
 
-(The skipped count grew from 3 to 11 with the Phase-3 wave: the 8
-tombstone-marked fixtures - `tagobjlit/*` and `taggedproto/*` - now expect
-the TS-only directive throws and has no Rust analog to compare; see the
-updated rows in section 3.)
-
 Every byte that the two implementations can both produce is **identical**, and all
 177 decode rejections agree **error-code-for-error-code** - including the
 subtle frozen behaviors that look like porting artifacts but are genuine Rust
@@ -51,19 +46,11 @@ input but deliberately (or incidentally) behave differently. They are frozen
 TS behavior: the API redesign must preserve them, and any change is a
 wire-behavior change requiring the full vector-suite gate.
 
-(A former entry here - byte-string/text lengths ≥ 2⁵³ rejecting with
-`OutOfRange` where Rust reports `Underrun` - was eliminated: the decoder now
-treats an unsatisfiable bigint length as the missing-body condition it is and
-throws `Underrun`, exactly like Rust's `usize` bounds check. The decode side
-is now 100% error-code-identical, and `OutOfRange` is no longer
-decode-reachable at all. The differential harness records the baseline's old
-code pair in `isKnownLengthCodeChange`.)
-
 ### 1.1 Non-finite date timestamps: TS guards, Rust saturates
 
 | input | @blockchaincommons/dcbor | dcbor (Rust) |
 |---|---|---|
-| `CborDate.fromEpochSeconds(NaN)` / `(±Infinity)` (pre-P3.13: `fromTimestamp`) | throws `InvalidDate` ("non-finite timestamp") | `Date::from_timestamp` saturating-casts (NaN → epoch `0`, encodes `c100`) |
+| `CborDate.fromEpochSeconds(NaN)` / `(±Infinity)` (`fromTimestamp`) | throws `InvalidDate` ("non-finite timestamp") | `Date::from_timestamp` saturating-casts (NaN → epoch `0`, encodes `c100`) |
 
 **Why:** the TS port added an explicit finiteness guard; Rust's
 `Date::from_timestamp` does `trunc() as i64` / `fract() * 1e9 as u32`, and Rust
