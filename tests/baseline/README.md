@@ -1,6 +1,6 @@
 # Frozen baseline build (P1.1 differential harness)
 
-`dcbor-baseline.mjs` is the dependency-free ESM bundle of dcbor-ts built from
+`dcbor-baseline.mjs` is the dependency-free ESM bundle of @blockchaincommons/dcbor built from
 commit `187769a273176a2c6089fb412871226b6db1e795` - the frozen pre-redesign
 wire-format reference. (Its trailing `sourceMappingURL` comment was removed
 because the `.map` file is not vendored.)

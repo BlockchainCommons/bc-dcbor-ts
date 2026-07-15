@@ -2,7 +2,7 @@
   "$schema": "https://typedoc.org/schema.json",
   "entryPoints": ["src/index.ts", "src/diagnostic.ts", "src/walk.ts", "src/debug.ts"],
   "out": "docs",
-  "name": "dcbor-ts",
+  "name": "@blockchaincommons/dcbor",
   "includeVersion": true,
   "readme": "README.md",
   "exclude": [

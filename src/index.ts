@@ -1,5 +1,5 @@
 /**
- * dcbor-ts - Deterministic CBOR (dCBOR) for TypeScript.
+ * @blockchaincommons/dcbor - Deterministic CBOR (dCBOR) for TypeScript.
  *
  * ## Public surface
  *
@@ -14,10 +14,10 @@
  *   type-narrowing guard; `asX(c)` = `T | undefined`; `expectX(c)` = `T` or
  *   throw. Containers mirror the JS `Map`/`Set` vocabulary.
  * - **Format/traverse:** `import { diagnostic, hexAnnotated } from
- *   "dcbor-ts/diagnostic"`; `import { walk } from "dcbor-ts/walk"`;
- *   opt-in debug output via `dcbor-ts/debug`.
+ *   "@blockchaincommons/dcbor/diagnostic"`; `import { walk } from "@blockchaincommons/dcbor/walk"`;
+ *   opt-in debug output via `@blockchaincommons/dcbor/debug`.
  *
- * @module dcbor-ts
+ * @module @blockchaincommons/dcbor
  */
 
 // Core CBOR types and encoding/decoding. `Cbor` is a type-only export.
@@ -100,7 +100,7 @@ export {
 export { CborDate } from "./date";
 
 // Hex byte utilities (the names match `Uint8Array.toHex`/`fromHex`; the
-// diagnostic/annotated formatters live in the `dcbor-ts/diagnostic` subpath).
+// diagnostic/annotated formatters live in the `@blockchaincommons/dcbor/diagnostic` subpath).
 export { hexToBytes, bytesToHex } from "./hex";
 
 // Error types

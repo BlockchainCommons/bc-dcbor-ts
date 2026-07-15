@@ -158,7 +158,7 @@ export interface CborMethods {
    * Cheap debug string: `Cbor(0x…)` with the encoded hex.
    *
    * For the flat diagnostic form use `diagnostic(c, { flat: true })` from
-   * `dcbor-ts/diagnostic`, or `installDebugHooks()` from `dcbor-ts/debug`
+   * `@blockchaincommons/dcbor/diagnostic`, or `installDebugHooks()` from `@blockchaincommons/dcbor/debug`
    * for diag-flavored console output.
    */
   toString(): string;

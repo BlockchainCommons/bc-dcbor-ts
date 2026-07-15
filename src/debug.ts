@@ -1,5 +1,5 @@
 /**
- * The `dcbor-ts/debug` subpath entry - opt-in diagnostic-flavored
+ * The `@blockchaincommons/dcbor/debug` subpath entry - opt-in diagnostic-flavored
  * console output for `Cbor` values.
  *
  * The core keeps `String(c)` cheap (`Cbor(0x…)`); importing this module and

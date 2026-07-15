@@ -1,6 +1,6 @@
-# Migrating from `@bcts/dcbor` to `dcbor-ts`
+# Migrating from `@bcts/dcbor` to `@blockchaincommons/dcbor`
 
-`dcbor-ts` is the wire-compatible successor to `@bcts/dcbor`: the same
+`@blockchaincommons/dcbor` is the wire-compatible successor to `@bcts/dcbor`: the same
 deterministic CBOR codec, rebuilt into natural, modern, dependency-free
 TypeScript. **The encoded bytes are identical** - proven by a 93k-input
 differential corpus and cross-validated against the Rust reference
@@ -20,9 +20,9 @@ see the [Benchmarks](README.md#benchmarks) section (3-21× throughput,
 
 ## TL;DR checklist
 
-- [ ] Replace the dependency `@bcts/dcbor` with `dcbor-ts`; update imports.
-- [ ] Import `diagnostic`/`hexAnnotated` from `dcbor-ts/diagnostic` and
-      `walk` & friends from `dcbor-ts/walk` (they left the root).
+- [ ] Replace the dependency `@bcts/dcbor` with `@blockchaincommons/dcbor`; update imports.
+- [ ] Import `diagnostic`/`hexAnnotated` from `@blockchaincommons/dcbor/diagnostic` and
+      `walk` & friends from `@blockchaincommons/dcbor/walk` (they left the root).
 - [ ] `cborData(v)` → `encodeCbor(v)`; `toTaggedValue(t, v)` → `taggedValue(t, v)`.
 - [ ] Replace `Cbor` *value* usages (`Cbor.from`, `Cbor.tryFromData`,
       `Cbor.True`…) - the type survives, the namespace value is gone.
@@ -46,15 +46,15 @@ see the [Benchmarks](README.md#benchmarks) section (3-21× throughput,
 
 ```diff
 - import { cbor, cborData, decodeCbor, diagnostic } from "@bcts/dcbor";
-+ import { cbor, encodeCbor, decodeCbor } from "dcbor-ts";
-+ import { diagnostic, hexAnnotated } from "dcbor-ts/diagnostic";
-+ import { walk } from "dcbor-ts/walk";
++ import { cbor, encodeCbor, decodeCbor } from "@blockchaincommons/dcbor";
++ import { diagnostic, hexAnnotated } from "@blockchaincommons/dcbor/diagnostic";
++ import { walk } from "@blockchaincommons/dcbor/walk";
 ```
 
-Subpath entries (new): `dcbor-ts/diagnostic` (`diagnostic`, `hexAnnotated`
-and their options types), `dcbor-ts/walk` (`walk`, `Visitor`, `WalkElement`,
+Subpath entries (new): `@blockchaincommons/dcbor/diagnostic` (`diagnostic`, `hexAnnotated`
+and their options types), `@blockchaincommons/dcbor/walk` (`walk`, `Visitor`, `WalkElement`,
 `EdgeType`, `EdgeTypeVariant`, `asSingle`, `asKeyValue`, `edgeLabel`), and
-`dcbor-ts/debug` (`installDebugHooks()` - opt-in diagnostic-flavored console
+`@blockchaincommons/dcbor/debug` (`installDebugHooks()` - opt-in diagnostic-flavored console
 output). `bytesToHex`/`hexToBytes` stay at the root.
 
 ## 2. Two input shapes now throw (transitional, one rc cycle)
@@ -116,7 +116,7 @@ throws", everywhere.
 
 ## 4. Construction & encoding
 
-| `@bcts/dcbor` | `dcbor-ts` |
+| `@bcts/dcbor` | `@blockchaincommons/dcbor` |
 |---|---|
 | `Cbor.from(x)` | `cbor(x)` |
 | `Cbor.tryFromData(d)` | `decodeCbor(d)` |
@@ -138,7 +138,7 @@ former constants (`x === Cbor.True`) were never reliable for decoded values.
 `toString()`. **Flagged runtime change:** `String(c)` / template literals /
 `console.log` print `Cbor(0x…)` instead of the flat diagnostic - use
 `diagnostic(c, { flat: true })`, or `installDebugHooks()` from
-`dcbor-ts/debug` for console output.
+`@blockchaincommons/dcbor/debug` for console output.
 
 | before | after |
 |---|---|
@@ -149,15 +149,15 @@ former constants (`x === Cbor.True`) were never reliable for decoded values.
 | `c.expectTag(t)` | `expectTaggedContent(c, t)` |
 | `c.untagged()` | `extractTaggedContent(c)` |
 | `c.validateTag(tags)` | `validateTag(c, tags)` |
-| `c.walk(s, v)` | `walk(c, s, v)` from `dcbor-ts/walk` |
-| `c.toDiagnostic()` / `toDebugString()` / `toDiagnosticAnnotated()` | `diagnostic(c, …)` from `dcbor-ts/diagnostic` (the debug-string format was removed) |
+| `c.walk(s, v)` | `walk(c, s, v)` from `@blockchaincommons/dcbor/walk` |
+| `c.toDiagnostic()` / `toDebugString()` / `toDiagnosticAnnotated()` | `diagnostic(c, …)` from `@blockchaincommons/dcbor/diagnostic` (the debug-string format was removed) |
 | `c.toHexAnnotated(store)` | `hexAnnotated(c, { tagsStore: store })` |
 
 ## 6. Formatters & traversal
 
 | before (root import) | after |
 |---|---|
-| `diagnostic(c)` | `diagnostic(c)` from `dcbor-ts/diagnostic` |
+| `diagnostic(c)` | `diagnostic(c)` from `@blockchaincommons/dcbor/diagnostic` |
 | `diagnosticFlat(c)` | `diagnostic(c, { flat: true })` |
 | `diagnosticAnnotated(c)` | `diagnostic(c, { annotate: true })` |
 | `diagnosticOpt(c, o)` | `diagnostic(c, o)` |

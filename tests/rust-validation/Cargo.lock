@@ -108,7 +108,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "dcbor-ts-vector-validation"
+name = "dcbor-vector-validation"
 version = "0.1.0"
 dependencies = [
  "dcbor",

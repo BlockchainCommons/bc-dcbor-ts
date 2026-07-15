@@ -1,6 +1,6 @@
 # Divergences from the Rust reference implementation
 
-`dcbor-ts` is a port of [bc-dcbor-rust](https://github.com/BlockchainCommons/bc-dcbor-rust)
+`@blockchaincommons/dcbor` is a port of [bc-dcbor-rust](https://github.com/BlockchainCommons/bc-dcbor-rust)
 (crate `dcbor`). Its committed golden wire vectors (`tests/vectors/*.json`)
 have been cross-validated against the Rust reference, **pinned at
 `dcbor = 0.25.2`**, using the harness in `tests/rust-validation/`:
@@ -53,7 +53,7 @@ wire-behavior change requiring the full vector-suite gate.
 
 ### 1.1 Byte-string/text lengths ≥ 2⁵³ reject with a different error code
 
-| | dcbor-ts | dcbor (Rust) |
+| | @blockchaincommons/dcbor | dcbor (Rust) |
 |---|---|---|
 | `5b0020000000000000` (bstr, length 2⁵³) | `OutOfRange` | `Underrun` |
 | `5bffffffffffffffff` (bstr, length 2⁶⁴−1) | `OutOfRange` | `Underrun` |
@@ -73,7 +73,7 @@ implementations (e.g. `5b0000000100000000`).
 
 ### 1.2 Non-finite date timestamps: TS guards, Rust saturates
 
-| input | dcbor-ts | dcbor (Rust) |
+| input | @blockchaincommons/dcbor | dcbor (Rust) |
 |---|---|---|
 | `CborDate.fromEpochSeconds(NaN)` / `(±Infinity)` (pre-P3.13: `fromTimestamp`) | throws `InvalidDate` ("non-finite timestamp") | `Date::from_timestamp` saturating-casts (NaN → epoch `0`, encodes `c100`) |
 

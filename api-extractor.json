@@ -18,7 +18,7 @@
     "enabled": true,
     "reportFolder": "<projectFolder>/api/",
     "reportTempFolder": "<projectFolder>/dist/api-temp/",
-    "reportFileName": "dcbor-ts.api.md"
+    "reportFileName": "dcbor.api.md"
   },
   "docModel": { "enabled": false },
   "dtsRollup": { "enabled": false },

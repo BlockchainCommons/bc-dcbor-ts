@@ -1,4 +1,4 @@
-//! Cross-validates the dcbor-ts golden wire vectors against the Rust
+//! Cross-validates the @blockchaincommons/dcbor golden wire vectors against the Rust
 //! reference implementation (`dcbor` crate, bc-dcbor-rust).
 //!
 //! Usage: cargo run --release -- <path-to-tests/vectors>
