@@ -1,0 +1,131 @@
+{
+  "name": "dcbor-ts",
+  "version": "1.0.0-rc.2",
+  "type": "module",
+  "sideEffects": false,
+  "description": "Blockchain Commons Deterministic CBOR (dCBOR) for TypeScript",
+  "license": "BSD-2-Clause-Patent",
+  "author": "Leonardo Custodio <leonardo@custodio.me> (https://snowpine.io)",
+  "homepage": "https://bcts.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leonardocustodio/dcbor-ts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/leonardocustodio/dcbor-ts/issues"
+  },
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.mts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      },
+      "default": "./dist/index.mjs"
+    },
+    "./diagnostic": {
+      "import": {
+        "types": "./dist/diagnostic.d.mts",
+        "default": "./dist/diagnostic.mjs"
+      },
+      "require": {
+        "types": "./dist/diagnostic.d.cts",
+        "default": "./dist/diagnostic.cjs"
+      },
+      "default": "./dist/diagnostic.mjs"
+    },
+    "./walk": {
+      "import": {
+        "types": "./dist/walk.d.mts",
+        "default": "./dist/walk.mjs"
+      },
+      "require": {
+        "types": "./dist/walk.d.cts",
+        "default": "./dist/walk.cjs"
+      },
+      "default": "./dist/walk.mjs"
+    },
+    "./debug": {
+      "import": {
+        "types": "./dist/debug.d.mts",
+        "default": "./dist/debug.mjs"
+      },
+      "require": {
+        "types": "./dist/debug.d.cts",
+        "default": "./dist/debug.cjs"
+      },
+      "default": "./dist/debug.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "CHANGELOG.md",
+    "MIGRATION.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:golden": "vitest run tests/golden-vectors.test.ts",
+    "test:differential": "vitest run tests/differential.test.ts",
+    "vectors:generate": "bun scripts/generate-vectors.mjs",
+    "lint": "eslint 'src/**/*.ts' 'tests/**/*.ts'",
+    "lint:fix": "eslint 'src/**/*.ts' 'tests/**/*.ts' --fix",
+    "format": "prettier --write 'src/**/*.ts' 'tests/**/*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts' 'tests/**/*.ts'",
+    "typecheck": "tsc --noEmit",
+    "bench": "bun bench/benchmark.mjs",
+    "size": "size-limit",
+    "api:snapshot": "bun scripts/api-snapshot.mjs && node scripts/api-report.mjs --local",
+    "api:check": "bun scripts/api-snapshot.mjs --check && node scripts/api-report.mjs",
+    "clean": "rm -rf dist",
+    "docs": "typedoc",
+    "prepublishOnly": "npm run build",
+    "lint:pkg": "publint && attw --pack . --profile node16",
+    "check:deps": "node -e \"const d=require('./package.json').dependencies||{};const k=Object.keys(d);if(k.length){console.error('zero-dependency policy violated:',k);process.exit(1)}console.log('zero runtime dependencies')\""
+  },
+  "keywords": [
+    "cbor",
+    "dcbor",
+    "deterministic",
+    "blockchain-commons",
+    "encoding",
+    "serialization",
+    "codec",
+    "binary"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.4",
+    "@eslint/js": "^10.0.1",
+    "@microsoft/api-extractor": "^7.58.9",
+    "@size-limit/preset-small-lib": "^11.2.0",
+    "@types/node": "^26.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.62.0",
+    "@typescript-eslint/parser": "^8.62.0",
+    "@vitest/coverage-v8": "^4.1.9",
+    "ajv": "^8.18.0",
+    "eslint": "^10.6.0",
+    "fast-check": "^4.1.1",
+    "prettier": "3.9.4",
+    "publint": "^0.3.21",
+    "size-limit": "^11.2.0",
+    "tsdown": "^0.22.3",
+    "typedoc": "^0.28.19",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  },
+  "dependencies": {}
+}

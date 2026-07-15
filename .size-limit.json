@@ -1,0 +1,13 @@
+[
+  {
+    "name": "ESM entry (import *), minified + gzipped",
+    "path": "dist/index.mjs",
+    "limit": "10 kB"
+  },
+  {
+    "name": "decode-only ({ decodeCbor }), minified + gzipped",
+    "path": "dist/index.mjs",
+    "import": "{ decodeCbor }",
+    "limit": "6.5 kB"
+  }
+]

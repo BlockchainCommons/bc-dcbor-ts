@@ -1,0 +1,168 @@
+import { type CborNumber, isCborNumber, type MajorType } from "./cbor-types";
+import { hasFractionalPart } from "./float";
+import { CborError } from "./error";
+import { U64_MAX } from "./numeric";
+import { type BufWriter } from "./buf-writer";
+
+const typeBits = (t: MajorType): number => {
+  return t << 5;
+};
+
+/**
+ * Write a CBOR head (major type + argument) straight into `writer`, avoiding
+ * the intermediate `Uint8Array` that {@link encodeVarInt} allocates. This is
+ * the encoder hot path (every node emits a head). It MUST stay byte-identical
+ * to {@link encodeVarInt}; the golden vectors cover both.
+ */
+export const writeVarInt = (writer: BufWriter, value: CborNumber, majorType: MajorType): void => {
+  if (value < 0) {
+    throw CborError.outOfRange();
+  }
+  if (typeof value === "number" && hasFractionalPart(value)) {
+    throw CborError.outOfRange();
+  }
+  const type = typeBits(majorType);
+  if (isCborNumber(value) && value <= Number.MAX_SAFE_INTEGER) {
+    const n = Number(value);
+    if (n <= 23) {
+      writer.writeByte(n | type);
+    } else if (n <= 0xff) {
+      writer.writeByte(0x18 | type);
+      writer.writeByte(n);
+    } else if (n <= 0xffff) {
+      writer.writeByte(0x19 | type);
+      writer.writeUint16(n);
+    } else if (n <= 0xffffffff) {
+      writer.writeByte(0x1a | type);
+      writer.writeUint32(n);
+    } else {
+      writer.writeByte(0x1b | type);
+      writer.writeBigUint64(BigInt(n));
+    }
+  } else {
+    // See encodeVarInt: past MAX_SAFE_INTEGER the encoding collapses to the
+    // 9-byte u64 form (or OutOfRange above u64::MAX). BigInt keeps it lossless.
+    const big = BigInt(value);
+    if (big > U64_MAX) {
+      throw CborError.outOfRange();
+    }
+    writer.writeByte(0x1b | type);
+    writer.writeBigUint64(big);
+  }
+};
+
+export const encodeVarInt = (value: CborNumber, majorType: MajorType): Uint8Array<ArrayBuffer> => {
+  // throw an error if the value is negative.
+  if (value < 0) {
+    throw CborError.outOfRange();
+  }
+  // throw an error if the value is a number with a fractional part.
+  if (typeof value === "number" && hasFractionalPart(value)) {
+    throw CborError.outOfRange();
+  }
+  const type = typeBits(majorType);
+  // If the value is a `number` or a `bigint` that can be represented as a `number`, convert it to a `number`.
+  if (isCborNumber(value) && value <= Number.MAX_SAFE_INTEGER) {
+    value = Number(value);
+    if (value <= 23) {
+      return new Uint8Array([value | type]);
+    } else if (value <= 0xff) {
+      // Fits in UInt8
+      return new Uint8Array([0x18 | type, value]);
+    } else if (value <= 0xffff) {
+      // Fits in UInt16
+      const buffer = new ArrayBuffer(3);
+      const view = new DataView(buffer);
+      view.setUint8(0, 0x19 | type);
+      view.setUint16(1, value);
+      return new Uint8Array(buffer);
+    } else if (value <= 0xffffffff) {
+      // Fits in UInt32
+      const buffer = new ArrayBuffer(5);
+      const view = new DataView(buffer);
+      view.setUint8(0, 0x1a | type);
+      view.setUint32(1, value);
+      return new Uint8Array(buffer);
+    } else {
+      // Fits in MAX_SAFE_INTEGER
+      const buffer = new ArrayBuffer(9);
+      const view = new DataView(buffer);
+      view.setUint8(0, 0x1b | type);
+      view.setBigUint64(1, BigInt(value));
+      return new Uint8Array(buffer);
+    }
+  } else {
+    // Bigint branch - value is strictly greater than `Number.MAX_SAFE_INTEGER`,
+    // therefore strictly greater than `0xffffffff`. The CBOR encoding rule
+    // collapses to: 9 bytes total (header `0x1b | type` + 8 big-endian bytes)
+    // if the value fits in u64, otherwise `OutOfRange`. We must NOT use
+    // `Math.log2(Number(value))` here - `Number(value)` is lossy past 2^53
+    // and would mis-pick the encoding length for values near u64::MAX.
+    const big = BigInt(value);
+    if (big > U64_MAX) {
+      throw CborError.outOfRange();
+    }
+    const buffer = new ArrayBuffer(9);
+    const view = new DataView(buffer);
+    view.setUint8(0, 0x1b | type);
+    view.setBigUint64(1, big);
+    return new Uint8Array(buffer);
+  }
+};
+
+export const decodeVarIntData = (
+  dataView: DataView,
+  offset: number,
+): { majorType: MajorType; value: CborNumber; offset: number } => {
+  const initialByte = dataView.getUint8(offset);
+  const majorType = (initialByte >> 5) as MajorType;
+  const additionalInfo = initialByte & 0x1f;
+  let value: CborNumber;
+  offset += 1;
+  switch (additionalInfo) {
+    case 24: // 1-byte additional info
+      value = dataView.getUint8(offset);
+      offset += 1;
+      break;
+    case 25: // 2-byte additional info
+      value = ((dataView.getUint8(offset) << 8) | dataView.getUint8(offset + 1)) >>> 0;
+      offset += 2;
+      break;
+    case 26: // 4-byte additional info
+      value =
+        ((dataView.getUint8(offset) << 24) |
+          (dataView.getUint8(offset + 1) << 16) |
+          (dataView.getUint8(offset + 2) << 8) |
+          dataView.getUint8(offset + 3)) >>>
+        0;
+      offset += 4;
+      break;
+    case 27: // 8-byte additional info
+      value = getUint64(dataView, offset, false);
+      if (value <= Number.MAX_SAFE_INTEGER) {
+        value = Number(value);
+      }
+      offset += 8;
+      break;
+    default: // no additional info
+      value = additionalInfo;
+      break;
+  }
+  return { majorType, value, offset };
+};
+
+export const decodeVarInt = (
+  data: Uint8Array,
+): { majorType: MajorType; value: CborNumber; offset: number } => {
+  return decodeVarIntData(new DataView(data.buffer, data.byteOffset, data.byteLength), 0);
+};
+
+function getUint64(view: DataView, byteOffset: number, littleEndian: boolean): bigint {
+  const lowWord = littleEndian
+    ? view.getUint32(byteOffset, true)
+    : view.getUint32(byteOffset + 4, false);
+  const highWord = littleEndian
+    ? view.getUint32(byteOffset + 4, true)
+    : view.getUint32(byteOffset, false);
+  return (BigInt(highWord) << BigInt(32)) + BigInt(lowWord);
+}
