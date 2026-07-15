@@ -1,113 +1,97 @@
-# Blockchain Commons `$projectname`
+# Blockchain Commons Deterministic CBOR ("dCBOR")
 
-<!--Guidelines: https://github.com/BlockchainCommons/secure-template/wiki -->
+### _by Leonardo Custodio_
 
-### _by $major-authors_
+**`bc-dcbor-ts`** is a [CBOR](https://cbor.io) codec for TypeScript that focuses on writing and parsing _deterministic_ CBOR per IETF [draft-mcnally-deterministic-cbor](https://datatracker.ietf.org/doc/draft-mcnally-deterministic-cbor). It deliberately does **not** support the parts of the CBOR spec that are forbidden by deterministic encoding (such as indefinite-length arrays and maps), and it is strict in both what it writes and what it reads: it returns decoding errors when variable-length integers are not encoded in their minimal form, when CBOR map keys are not in lexicographic order, or when there is extra data past the end of the decoded item.
 
-**`$ProjectDescription`** is …
-
-## Additional Information
-
-The following files contain…
-
-* `$ListOfEssentialDocs`
+The library is ESM-first (with CommonJS support), has **zero runtime dependencies**, and produces **byte-for-byte identical output** to the Rust reference implementation.
 
 ## Installation Instructions
 
+`dcbor-ts` is published to npm (NOT YET). Install it with your package manager of choice:
+
+```sh
+npm install bc-dcbor-ts
+# or
+pnpm add bc-dcbor-ts
+# or
+yarn add bc-dcbor-ts
+# or
+bun add bc-dcbor-ts
+```
+
+**Requirements:** TypeScript >= 5.7 is required to consume the published types. Node >= 22.12 is required. Runtime code has no dependencies.
+
 ## Usage Instructions
 
-## Gordian Principles
+The entire public surface can be introduced in about a minute:
 
-` $projectname` is a reference implementation meant to display the [Gordian Principles](https://github.com/BlockchainCommons/Gordian#gordian-principles), which are philosophical and technical underpinnings to Blockchain Commons' Gordian technology. This includes:
+```typescript
+import {
+  cbor, encodeCbor, decodeCbor, tryDecode, taggedValue,
+  isMap, asText, expectArray, extractCbor, CborMap, CborDate,
+} from "dcbor-ts";
+import { diagnostic, hexAnnotated } from "dcbor-ts/diagnostic";
 
-* **Independence.** `how does it demonstrate independence`
-* **Privacy.** `how does it demonstrate privacy`
-* **Resilience.** `how does it demonstrate resilience`
-* **Openness.** `how does it demonstrate openness`
+// Construct: cbor() is the single polymorphic constructor.
+const value = cbor({ name: "Alice", scores: [98, 87], active: true });
+const dated = taggedValue(1, 1675854714); // the only tagged-value constructor
 
-Blockchain Commons apps do not phone home and do not run ads. Some are available through various app stores; all are available in our code repositories for your usage.
+// Encode: deterministic bytes - equal values always encode identically.
+const bytes = encodeCbor(value); // Uint8Array<ArrayBuffer>
 
-`REMOVE THIS SECTION UNLESS THIS IS A REFERENCE APP MEANT TO DEMONSTRATE GORDIAN PRINCIPLES`
+// Decode: decodeCbor throws CborError; tryDecode returns a Result.
+const decoded = decodeCbor(bytes);
+const result = tryDecode(bytes); // { ok: true, value } | { ok: false, error }
 
-## Status - Alpha
+// Read: fixed prefix semantics.
+isMap(decoded);          // is*     -> type-narrowing boolean guard
+asText(decoded);         // as*     -> T | undefined
+expectArray(decoded);    // expect* -> T, or throws CborError
+extractCbor(decoded);    // explicit native extraction (CborNative)
 
-` $projectname`  is currently under active development and in the alpha testing phase. It should not be used for production tasks until it has had further testing and auditing. See [Blockchain Commons' Development Phases](https://github.com/BlockchainCommons/Community/blob/master/release-path.md).
+// Format (subpath - never rides on the value prototype):
+diagnostic(decoded, { annotate: true });
+hexAnnotated(decoded);
+```
+
+Runnable examples live in the [`examples/`](./examples) directory.
+
+## Status - Beta
+
+`bc-dcbor-typescript` is currently under active development and in beta testing. It should not be used for production tasks until it has had further testing and auditing. See [Blockchain Commons' Development Phases](https://github.com/BlockchainCommons/Community/blob/master/release-path.md).
 
 ### Version History
 
+- **1.0.0-beta.1** - Initial beta implementation.
+
 ### Roadmap
 
-## Origin, Authors, Copyright & Licenses
-
-Unless otherwise noted (either in this [/README.md](./README.md) or in the file's header comments) the contents of this repository are Copyright © 2020 by Blockchain Commons, LLC, and are [licensed](./LICENSE) under the [spdx:BSD-2-Clause Plus Patent License](https://spdx.org/licenses/BSD-2-Clause-Patent.html).
-
-In most cases, the authors, copyright, and license for each file reside in header comments in the source code. When it does not, we have attempted to attribute it accurately in the table below.
-
-This table below also establishes provenance (repository of origin, permalink, and commit id) for files included from repositories that are outside of this repo. Contributors to these files are listed in the commit history for each repository, first with changes found in the commit history of this repo, then in changes in the commit history of their repo of their origin.
-
-| File      | From                                                         | Commit                                                       | Authors & Copyright (c)                                | License                                                     |
-| --------- | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------ | ----------------------------------------------------------- |
-| exception-to-the-rule.c or exception-folder | [https://github.com/community/repo-name/PERMALINK](https://github.com/community/repo-name/PERMALINK) | [https://github.com/community/repo-name/commit/COMMITHASH]() | 2020 Exception Author  | [MIT](https://spdx.org/licenses/MIT)                        |
+- Continued testing and auditing on the path from beta to a stable **1.0.0** release.
+- Stabilization of the typed-decode API (`CborCodec<T>` / `decodeWith`), currently marked `@beta`.
+- Ongoing tracking of the [draft-mcnally-deterministic-cbor](https://datatracker.ietf.org/doc/draft-mcnally-deterministic-cbor/) specification as it advances through the IETF process.
+- Continued parity with the Rust reference implementation as it evolves (see [`RUST_DIVERGENCES.md`](./RUST_DIVERGENCES.md)).
 
 ### Dependencies
 
-To build  `$projectname` you'll need to use the following tools:
+`dcbor-ts` has **zero runtime dependencies**. To build and work on it, you'll need the following tools:
 
-- autotools - Gnu Build System from Free Software Foundation ([intro](https://www.gnu.org/software/automake/manual/html_node/Autotools-Introduction.html)).
-
-Other prerequisites include:
-
-...
-
-### Libraries
-
-The following external libraries are used with `$projectname`:
-
-- [community/repo-name](https://github.com/community/repo-name) — What the library does (use OR fork [version] OR include [version]).
-
-Libraries may be marked as `use` (the current version of the library is used), `fork` (a specific version has been forked to the BCC repos for usage), or `include` (files from a specific version have been included).
+- [Node.js](https://nodejs.org/) >= 22.12 - JavaScript runtime.
+- [Bun](https://bun.sh/) - used in CI to install dependencies and run scripts (any Node-compatible package manager also works).
+- [TypeScript](https://www.typescriptlang.org/) >= 5.7 - language and type checker.
 
 ### Derived from ...
 
-This  `$projectname` project is either derived from or was inspired by:
+This `bc-dcbor-typescript` project is either derived from or was inspired by:
 
-- [community/repo-name/](https://github.com/community/repo-name) — Repo that does what, by [developer](https://github.com/developer)  or from  [community](https://community.com).
-
-## Subsequent Usage
-
-### Adapted by ...
-
-These are adaptations, conversions, and wrappers that make `$projectname` available for other languages:
-
-- [community/repo-name/](https://github.com/community/repo-name) — Repo that does what, by [developer](https://github.com/developer)  or from  [community](https://community.com)(language).
-
-### Used by ...
-
-These are other projects that directly use `$projectname`:
-
-- [community/repo-name/](https://github.com/community/repo-name) — Repo that does what, by [developer](https://github.com/developer)  or from  [community](https://community.com)(use OR fork [version] OR include [version]).
-
-Libraries may be marked as `use` (the current version of our repo is used), `fork` (a specific version of our repo has been forked for usage), or `include` (files from a specific version of our repo have been included).
-
-### Used with ...
-
-These are other projects that work with or leverage `$projectname`:
-
-- [community/repo-name/](https://github.com/community/repo-name) — Repo that does what, by [developer](https://github.com/developer)  or from  [community](https://community.com).
+- [BlockchainCommons/bc-dcbor-rust](https://github.com/BlockchainCommons/bc-dcbor-rust) - The reference rust implementation, by [Wolf McNally](https://github.com/wolfmcnally).
+- [paritytech/bcts](https://github.com/paritytech/bcts) - A TypeScript port covering many Blockchain Commons' implementations, by [Parity Technologies](https://github.com/paritytech).
 
 ## Financial Support
 
-`$projectname` is a project of [Blockchain Commons](https://www.blockchaincommons.com/). We are proudly a "not-for-profit" social benefit corporation committed to open source & open development. Our work is funded entirely by donations and collaborative partnerships with people like you. Every contribution will be spent on building open tools, technologies, and techniques that sustain and advance blockchain and internet security infrastructure and promote an open web.
+`bc-dcbor-ts` is a project of [Blockchain Commons](https://www.blockchaincommons.com/). We are proudly a "not-for-profit" social benefit corporation committed to open source & open development. Our work is funded entirely by donations and collaborative partnerships with people like you. Every contribution will be spent on building open tools, technologies, and techniques that sustain and advance blockchain and internet security infrastructure and promote an open web.
 
-To financially support further development of `$projectname` and other projects, please consider becoming a Patron of Blockchain Commons through ongoing monthly patronage as a [GitHub Sponsor](https://github.com/sponsors/BlockchainCommons). You can also support Blockchain Commons with bitcoins at our [BTCPay Server](https://btcpay.blockchaincommons.com/).
-
-### Project Sponsors
-
-Thanks to our project sponsors for their support of `$projectname`:
-
-$sponsor-logo-with-link
-
-$sponsor-description
+To financially support further development of `bc-dcbor-typescript` and other projects, please consider becoming a Patron of Blockchain Commons through ongoing monthly patronage as a [GitHub Sponsor](https://github.com/sponsors/BlockchainCommons). You can also support Blockchain Commons with bitcoins at our [BTCPay Server](https://btcpay.blockchaincommons.com/).
 
 ## Contributing
 
@@ -137,6 +121,9 @@ The following people directly contributed to this repository. You can add your n
 | Name              | Role                | Github                                            | Email                                 | GPG Fingerprint                                    |
 | ----------------- | ------------------- | ------------------------------------------------- | ------------------------------------- | -------------------------------------------------- |
 | Christopher Allen | Principal Architect | [@ChristopherA](https://github.com/ChristopherA) | \<ChristopherA@LifeWithAlacrity.com\> | FDFE 14A5 4ECB 30FC 5D22  74EF F8D3 6C91 3574 05ED |
+| Wolf McNally      | Lead Researcher/Engineer | [@wolfmcnally](https://github.com/wolfmcnally) | \<Wolf@WolfMcNally.com\> | 9436 52EE 3844 1760 C3DC  3536 4B6C 2FCF 8947 80AE |
+| Leonardo Custodio | Maintainer        | [@leonardocustodio](https://github.com/leonardocustodio) | \<leonardo@snowpine.io\> | 59DA D997 67EF 3BAB 2B90 D057 5384 DEF3 B582 450D |
+
 
 ## Responsible Disclosure
 
