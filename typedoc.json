@@ -47,6 +47,5 @@
   },
   "searchInComments": true,
   "cleanOutputDir": true,
-  "gitRevision": "main",
   "plugin": []
 }
