@@ -1,9 +1,9 @@
 //#region src/debug.d.ts
 /**
-* Install diag-flavored `util.inspect.custom` and `toJSON` hooks onto the
-* shared `Cbor` prototype. Idempotent; affects every `Cbor` value in the
-* realm (they share one prototype).
-*/
+ * Install diag-flavored `util.inspect.custom` and `toJSON` hooks onto the
+ * shared `Cbor` prototype. Idempotent; affects every `Cbor` value in the
+ * realm (they share one prototype).
+ */
 declare const installDebugHooks: () => void;
 //#endregion
 export { installDebugHooks };
