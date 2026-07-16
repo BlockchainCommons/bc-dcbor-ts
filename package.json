@@ -92,6 +92,7 @@
     "api:check": "bun scripts/api-snapshot.mjs --check && node scripts/api-report.mjs",
     "clean": "rm -rf dist",
     "docs": "typedoc",
+    "postinstall": "node scripts/pin-lint-typescript.mjs",
     "prepublishOnly": "npm run build",
     "lint:pkg": "publint && attw --pack . --profile node16",
     "check:deps": "node -e \"const d=require('./package.json').dependencies||{};const k=Object.keys(d);if(k.length){console.error('zero-dependency policy violated:',k);process.exit(1)}console.log('zero runtime dependencies')\""
@@ -110,24 +111,25 @@
     "node": ">=22.12"
   },
   "devDependencies": {
-    "@arethetypeswrong/cli": "^0.18.4",
+    "@arethetypeswrong/cli": "^0.18.5",
     "@eslint/js": "^10.0.1",
     "@microsoft/api-extractor": "^7.58.9",
-    "@size-limit/preset-small-lib": "^11.2.0",
-    "@types/node": "^26.0.1",
-    "@typescript-eslint/eslint-plugin": "^8.62.0",
-    "@typescript-eslint/parser": "^8.62.0",
-    "@vitest/coverage-v8": "^4.1.9",
-    "ajv": "^8.18.0",
-    "eslint": "^10.6.0",
-    "fast-check": "^4.1.1",
-    "prettier": "3.9.4",
+    "@size-limit/preset-small-lib": "^12.1.0",
+    "@types/node": "^26.1.1",
+    "@typescript-eslint/eslint-plugin": "^8.64.0",
+    "@typescript-eslint/parser": "^8.64.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "ajv": "^8.20.0",
+    "eslint": "^10.7.0",
+    "fast-check": "^4.9.0",
+    "prettier": "3.9.5",
     "publint": "^0.3.21",
-    "size-limit": "^11.2.0",
-    "tsdown": "^0.22.3",
-    "typedoc": "^0.28.19",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "size-limit": "^12.1.0",
+    "tsdown": "^0.22.8",
+    "typedoc": "^0.28.20",
+    "typescript": "^7.0.2",
+    "typescript6": "npm:typescript@^6.0.3",
+    "vitest": "^4.1.10"
   },
   "dependencies": {}
 }

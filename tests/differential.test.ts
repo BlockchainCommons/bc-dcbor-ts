@@ -58,9 +58,7 @@ const EXPECTED_TOMBSTONES = new Map<"P3.5" | "P3.7", string>([
   ["P3.7", "Custom"],
 ]);
 
-type DecodeDiffOutcome =
-  | { ok: true; hex: string }
-  | { ok: false; code: string; stage?: string };
+type DecodeDiffOutcome = { ok: true; hex: string } | { ok: false; code: string; stage?: string };
 
 /**
  * Deliberate decode-behavior change landed AFTER the frozen baseline:
