@@ -63,7 +63,7 @@ Runnable examples live in the [`examples/`](https://github.com/BlockchainCommons
 
 ### Version History
 
-- **1.0.0-beta.1** - Initial beta implementation.
+- **1.0.0-beta.1 (July 21, 2026)** - Initial beta implementation.
 
 ### Roadmap
 
