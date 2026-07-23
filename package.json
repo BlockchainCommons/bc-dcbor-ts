@@ -122,7 +122,7 @@
     "ajv": "^8.20.0",
     "eslint": "^10.7.0",
     "fast-check": "^4.9.0",
-    "prettier": "3.9.5",
+    "prettier": "3.9.6",
     "publint": "^0.3.21",
     "size-limit": "^12.1.0",
     "tsdown": "^0.22.8",
