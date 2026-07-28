@@ -124,6 +124,11 @@ The following people directly contributed to this repository. You can add your n
 | Wolf McNally      | Lead Researcher/Engineer | [@wolfmcnally](https://github.com/wolfmcnally) | \<Wolf@WolfMcNally.com\> | 9436 52EE 3844 1760 C3DC  3536 4B6C 2FCF 8947 80AE |
 | Leonardo Custodio | Maintainer        | [@leonardocustodio](https://github.com/leonardocustodio) | \<leonardo@snowpine.io\> | 59DA D997 67EF 3BAB 2B90 D057 5384 DEF3 B582 450D |
 
+### Contributing Sponsor
+
+**Blockchain Commons Deterministic CBOR for TypeScript** was produced as a collaboration between Blockchain Commons and one of our patrons, Parity Technologies: Parity wrote the wrappers based on Blockchain Commons' specifications and reference libraries. Blockchain Commons is dedicated to not just creating open infrastructure on our own, but also coordinating the work of other companies in benefiting the Commons. Thanks to Parity for working directly with us in this manner.
+
+![](.github/parity.svg)
 
 ## Responsible Disclosure
 
