@@ -174,7 +174,23 @@ export const TAG_NAME_DATE = "date";
  *
  * @param store - Target store; defaults to the global tags store.
  */
-export const registerStandardTags = (store: TagsStore = getGlobalTagsStore()): void => {
+/** Options for {@link registerStandardTags}. */
+export interface RegisterStandardTagsOptions {
+  /**
+   * Also register the bignum tags 2 and 3 with their names and summarizers.
+   * Off by default: the reference names them only when built with its
+   * `num-bigint` feature, which no crate in the Blockchain Commons stack
+   * enables, so a Rust peer prints `2(h'…')` where an opted-in store prints
+   * `bignum(…)`.
+   */
+  readonly bignum?: boolean | undefined;
+}
+
+export const registerStandardTags = (
+  store: TagsStore = getGlobalTagsStore(),
+  options: RegisterStandardTagsOptions = {},
+): void => {
+  const bignum = options.bignum ?? false;
   const tagsStore = store;
   const dateTag = Tag.from(TAG_DATE, TAG_NAME_DATE);
   if (tagsStore.tagForValue(TAG_DATE)?.name !== TAG_NAME_DATE) {
@@ -191,7 +207,9 @@ export const registerStandardTags = (store: TagsStore = getGlobalTagsStore()): v
     }
   });
 
-  // Register bignum tags.
+  if (!bignum) return;
+
+  // Register bignum tags (the reference's `num-bigint` build).
   const biguintTag = Tag.from(TAG_POSITIVE_BIGNUM, TAG_NAME_POSITIVE_BIGNUM);
   const bigintTag = Tag.from(TAG_NEGATIVE_BIGNUM, TAG_NAME_NEGATIVE_BIGNUM);
   for (const tag of [biguintTag, bigintTag]) {

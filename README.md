@@ -4,8 +4,6 @@
 
 **`bc-dcbor-ts`** is a [CBOR](https://cbor.io) codec for TypeScript that focuses on writing and parsing _deterministic_ CBOR per IETF [draft-mcnally-deterministic-cbor](https://datatracker.ietf.org/doc/draft-mcnally-deterministic-cbor). It deliberately does **not** support the parts of the CBOR spec that are forbidden by deterministic encoding (such as indefinite-length arrays and maps), and it is strict in both what it writes and what it reads: it returns decoding errors when variable-length integers are not encoded in their minimal form, when CBOR map keys are not in lexicographic order, or when there is extra data past the end of the decoded item.
 
-The library is ESM-first (with CommonJS support), has **zero runtime dependencies**, and produces **byte-for-byte identical output** to the Rust reference implementation.
-
 ## Installation Instructions
 
 [@blockchaincommons/dcbor](https://www.npmjs.com/package/@blockchaincommons/dcbor) is published to npm. Install it with your package manager of choice:
@@ -19,8 +17,6 @@ yarn add @blockchaincommons/dcbor
 # or
 bun add @blockchaincommons/dcbor
 ```
-
-**Requirements:** TypeScript >= 5.7 is required to consume the published types. Node >= 22.12 is required. Runtime code has no dependencies.
 
 ## Usage Instructions
 
@@ -63,13 +59,12 @@ Runnable examples live in the [`examples/`](https://github.com/BlockchainCommons
 
 ### Version History
 
+- **1.0.0-beta.2 (September 13, 2026)** - Diagnostic line breaking measures strings in UTF-8 bytes as the reference does; dates outside the reference's representable range are `InvalidDate` (an integer `f64` cannot hold is `OutOfRange` on decode) instead of a late `RangeError`; `registerStandardTags` names the bignum tags only on request, as the reference names them only under `num-bigint`; a tag-registration conflict is a `CborError`; `CborDate.fromString` parses exactly as `Date::from_string` (nanosecond fractions, leap seconds, chrono's bare-date forms), the component constructors validate instead of rolling over, and `toString()` prints years outside 0–9999 as the reference does.
 - **1.0.0-beta.1 (July 21, 2026)** - Initial beta implementation.
 
 ### Roadmap
 
 - Continued testing and auditing on the path from beta to a stable **1.0.0** release.
-- Stabilization of the typed-decode API (`CborCodec<T>` / `decodeWith`), currently marked `@beta`.
-- Ongoing tracking of the [draft-mcnally-deterministic-cbor](https://datatracker.ietf.org/doc/draft-mcnally-deterministic-cbor/) specification as it advances through the IETF process.
 - Continued parity with the Rust reference implementation as it evolves (see [`RUST_DIVERGENCES.md`](./RUST_DIVERGENCES.md)).
 
 ### Dependencies
@@ -77,7 +72,7 @@ Runnable examples live in the [`examples/`](https://github.com/BlockchainCommons
 `@blockchaincommons/dcbor` has **zero runtime dependencies**. To build and work on it, you'll need the following tools:
 
 - [Node.js](https://nodejs.org/) >= 22.12 - JavaScript runtime.
-- [Bun](https://bun.sh/) - used in CI to install dependencies and run scripts (any Node-compatible package manager also works).
+- [Bun](https://bun.sh/) - used to install dependencies and run scripts (any node package manager works).
 - [TypeScript](https://www.typescriptlang.org/) >= 5.7 - language and type checker.
 
 ### Derived from ...
@@ -85,7 +80,7 @@ Runnable examples live in the [`examples/`](https://github.com/BlockchainCommons
 This `bc-dcbor-ts` project is either derived from or was inspired by:
 
 - [BlockchainCommons/bc-dcbor-rust](https://github.com/BlockchainCommons/bc-dcbor-rust) - The reference rust implementation, by [Wolf McNally](https://github.com/wolfmcnally).
-- [paritytech/bcts](https://github.com/paritytech/bcts) - A TypeScript port covering many Blockchain Commons' implementations, by [Parity Technologies](https://github.com/paritytech).
+- [paritytech/bcts](https://github.com/paritytech/bcts) - A TypeScript port of many Blockchain Commons' specs, by [Parity Technologies](https://github.com/paritytech).
 
 ## Financial Support
 
@@ -122,13 +117,13 @@ The following people directly contributed to this repository. You can add your n
 | ----------------- | ------------------- | ------------------------------------------------- | ------------------------------------- | -------------------------------------------------- |
 | Christopher Allen | Principal Architect | [@ChristopherA](https://github.com/ChristopherA) | \<ChristopherA@LifeWithAlacrity.com\> | FDFE 14A5 4ECB 30FC 5D22  74EF F8D3 6C91 3574 05ED |
 | Wolf McNally      | Lead Researcher/Engineer | [@wolfmcnally](https://github.com/wolfmcnally) | \<Wolf@WolfMcNally.com\> | 9436 52EE 3844 1760 C3DC  3536 4B6C 2FCF 8947 80AE |
-| Leonardo Custodio | Maintainer        | [@leonardocustodio](https://github.com/leonardocustodio) | \<leonardo@snowpine.io\> | 59DA D997 67EF 3BAB 2B90 D057 5384 DEF3 B582 450D |
+| Leonardo Custodio | Software Engineer   | [@leonardocustodio](https://github.com/leonardocustodio) | \<leonardo@snowpine.io\> | 59DA D997 67EF 3BAB 2B90 D057 5384 DEF3 B582 450D |
 
 ### Contributing Sponsor
 
 **Blockchain Commons Deterministic CBOR for TypeScript** was produced as a collaboration between Blockchain Commons and one of our patrons, [Parity Technologies](https://parity.io): Parity wrote the wrappers based on Blockchain Commons' specifications and reference libraries. Blockchain Commons is dedicated to not just creating open infrastructure on our own, but also coordinating the work of other companies in benefiting the Commons. Thanks to Parity for working directly with us in this manner.
 
-![](.github/parity.svg)
+![](.github/assets/parity.svg)
 
 ## Responsible Disclosure
 

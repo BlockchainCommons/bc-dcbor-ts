@@ -22,9 +22,7 @@ if (!existsSync(ts6)) {
 }
 
 const consumers = [
-  ...readdirSync(join(nodeModules, "@typescript-eslint")).map((d) =>
-    join("@typescript-eslint", d),
-  ),
+  ...readdirSync(join(nodeModules, "@typescript-eslint")).map((d) => join("@typescript-eslint", d)),
   "ts-api-utils",
   "typedoc",
 ];

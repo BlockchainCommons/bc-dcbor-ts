@@ -602,8 +602,13 @@ export interface ReadonlyTagsStore {
     tagForValue(value: CborNumber): Tag | undefined;
 }
 
+// @public (undocumented)
+export const registerStandardTags: (store?: TagsStore, options?: RegisterStandardTagsOptions) => void;
+
 // @public
-export const registerStandardTags: (store?: TagsStore) => void;
+export interface RegisterStandardTagsOptions {
+    readonly bignum?: boolean | undefined;
+}
 
 // @public
 export type Result<T> = {

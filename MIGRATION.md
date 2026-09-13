@@ -1,22 +1,6 @@
 # Migrating from `@bcts/dcbor` to `@blockchaincommons/dcbor`
 
-`@blockchaincommons/dcbor` is the wire-compatible successor to `@bcts/dcbor`: the same
-deterministic CBOR codec, rebuilt into natural, modern, dependency-free
-TypeScript. **The encoded bytes are identical** - proven by a 93k-input
-differential corpus and cross-validated against the Rust reference
-implementation - so any data you produced or persisted with `@bcts/dcbor`
-continues to decode unchanged. There is no data migration; every change
-below is API spelling.
-
-**Floors:** TypeScript >= 5.7, Node >= 22.12. ESM-first with CJS; there is
-no IIFE/browser bundle (use a bundler). Formatting and traversal live in
-subpath entries so decode-only bundles stay ~5 kB (brotli).
-
-It is also a substantially faster and smaller build of the same codec -
-see the [Benchmarks](README.md#benchmarks) section (3-21× throughput,
-5-10× less retained memory, 2 → 0 runtime dependencies).
-
----
+`@blockchaincommons/dcbor` is the redesigned successor to `@bcts/dcbor`.
 
 ## TL;DR checklist
 

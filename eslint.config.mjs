@@ -4,9 +4,7 @@ import tsParser from "@typescript-eslint/parser";
 import { resolve } from "node:path";
 
 /*
- * Strict, type-checked ESLint flat config for the @blockchaincommons/dcbor library.
- * (Migrated from the @bcts/eslint shared config, inlined here so the package
- * is self-contained.)
+ * Strict, type-checked ESLint flat config for the @blockchaincommons/envelope library.
  */
 const project = resolve(process.cwd(), "./tsconfig.json");
 
@@ -36,9 +34,14 @@ export default [
       ...tsPlugin.configs["recommended-type-checked"].rules,
       ...tsPlugin.configs["stylistic-type-checked"].rules,
 
-      // Conflicts with tsconfig `isolatedDeclarations` (P1.3), which REQUIRES
+      // Conflicts with tsconfig `isolatedDeclarations`, which REQUIRES
       // explicit annotations on exported consts the rule deems inferrable.
       "@typescript-eslint/no-inferrable-types": "off",
+
+      // Conflicts with tsconfig `isolatedDeclarations`, which REQUIRES a type
+      // annotation on the exported variable; this rule wants that annotation
+      // removed in favour of a constructor type argument.
+      "@typescript-eslint/consistent-generic-constructors": "off",
 
       // Type safety errors
       "@typescript-eslint/no-explicit-any": "error",
@@ -141,6 +144,39 @@ export default [
           project,
         },
       },
+    },
+  },
+  // Executable entry points inside a library: these run in Node.js and are
+  // expected to use process, console and friends.
+  {
+    files: ["src/bin/**/*.ts", "src/cmd/**/*.ts", "src/cli.ts", "src/main.ts"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 2020,
+        sourceType: "module",
+        project,
+      },
+      globals: {
+        process: "readonly",
+        Buffer: "readonly",
+        console: "readonly",
+        __dirname: "readonly",
+        __filename: "readonly",
+        TextEncoder: "readonly",
+        TextDecoder: "readonly",
+      },
+    },
+    plugins: {
+      "@typescript-eslint": tsPlugin,
+    },
+    rules: {
+      ...tsPlugin.configs["recommended-type-checked"].rules,
+      "no-console": "off",
+      "no-restricted-globals": "off",
+      "no-restricted-syntax": "off",
+      "no-undef": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
     },
   },
   // Test file rules - relaxed for testing

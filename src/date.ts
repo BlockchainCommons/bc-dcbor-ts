@@ -33,11 +33,119 @@ import { CborError } from "./error";
  *
  * @internal
  */
+/**
+ * The reference's representable range: chrono's `NaiveDateTime::MIN`
+ * (−262143-01-01T00:00:00) and `MAX` (262142-12-31T23:59:59.999999999) as
+ * Unix seconds. Beyond it `Date::from_timestamp` panics (`timestamp_opt(…)
+ * .unwrap()`); here it is `InvalidDate`. JS `Date` reaches further (±8.64e12
+ * s), so every accepted value also renders.
+ */
+const MIN_TIMESTAMP_SECONDS = -8_334_601_228_800;
+const MAX_TIMESTAMP_SECONDS = 8_210_266_876_799;
+
+/** `f64::exact_from_u64`: the magnitude as a number, or `OutOfRange` when inexact. */
+function exactNumber(magnitude: bigint): number {
+  const n = Number(magnitude);
+  if (!Number.isFinite(n) || BigInt(n) !== magnitude) throw CborError.outOfRange();
+  return n;
+}
+
+/** chrono's `NaiveDate` year range (`MIN_YEAR` / `MAX_YEAR`). */
+const MIN_YEAR = -262_143;
+const MAX_YEAR = 262_142;
+
+const isLeapYear = (year: number): boolean =>
+  year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+const daysInMonth = (year: number, month: number): number =>
+  month === 2 && isLeapYear(year) ? 29 : (DAYS_IN_MONTH[month - 1] ?? 0);
+
+/**
+ * Days since 1970-01-01 of a proleptic-Gregorian civil date (the components
+ * must already be valid). Pure integer arithmetic, as chrono computes it: JS
+ * `Date.UTC` would map years 0–99 to 1900–1999.
+ */
+function daysFromCivil(year: number, month: number, day: number): number {
+  const y = month <= 2 ? year - 1 : year;
+  const era = Math.floor(y / 400);
+  const yoe = y - era * 400;
+  const doy = Math.floor((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5) + day - 1;
+  const doe = yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy;
+  return era * 146_097 + doe - 719_468;
+}
+
+/** The civil date of a day count since 1970-01-01 (inverse of `daysFromCivil`). */
+function civilFromDays(days: number): [number, number, number] {
+  const z = days + 719_468;
+  const era = Math.floor(z / 146_097);
+  const doe = z - era * 146_097;
+  const yoe = Math.floor(
+    (doe - Math.floor(doe / 1_460) + Math.floor(doe / 36_524) - Math.floor(doe / 146_096)) / 365,
+  );
+  const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100));
+  const mp = Math.floor((5 * doy + 2) / 153);
+  const day = doy - Math.floor((153 * mp + 2) / 5) + 1;
+  const month = mp < 10 ? mp + 3 : mp - 9;
+  const year = yoe + era * 400 + (month <= 2 ? 1 : 0);
+  return [year, month, day];
+}
+
+/**
+ * Whole seconds since the Unix epoch of the given UTC components, or
+ * `undefined` when they are not a valid date-time. The checks are chrono's
+ * (`NaiveDate::from_ymd_opt`, `NaiveTime::from_hms_opt`): the year within
+ * ±262143, a calendar-valid month and day, and `hh:mm:ss` within 23:59:59.
+ */
+function civilSeconds(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+): number | undefined {
+  if (![year, month, day, hour, minute, second].every(Number.isInteger)) return undefined;
+  if (year < MIN_YEAR || year > MAX_YEAR) return undefined;
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) return undefined;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) {
+    return undefined;
+  }
+  return daysFromCivil(year, month, day) * 86_400 + hour * 3_600 + minute * 60 + second;
+}
+
+/** Rust's `char::is_whitespace` (Unicode `White_Space`), as a character class. */
+const WHITESPACE =
+  "[\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]";
+
+/**
+ * chrono's fixed-layout RFC 3339 grammar (`DateTime::parse_from_rfc3339`):
+ * `YYYY-MM-DD`, a `T`/`t`/space separator, `hh:mm:ss`, an optional fraction
+ * of which the first nine digits count, then `Z`/`z` or `±hh:mm` (U+2212 is
+ * accepted as the minus sign). Nothing may follow.
+ */
+const RFC3339 =
+  /^(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9})\d*)?(?:[Zz]|([+\-\u2212])(\d{2}):(\d{2}))$/;
+
+/**
+ * chrono's strftime `%Y-%m-%d` (`NaiveDate::parse_from_str`): each number may
+ * be preceded by whitespace; `%Y` is one to four digits, or a sign followed by
+ * any number of digits; `%m` and `%d` are one or two digits; nothing may
+ * follow.
+ */
+const YMD = new RegExp(
+  `^${WHITESPACE}*(?:([+-])(\\d+)|(\\d{1,4}))-${WHITESPACE}*(\\d{1,2})-${WHITESPACE}*(\\d{1,2})$`,
+);
+
 function normalizeTimestampSeconds(seconds: number): number {
   if (!Number.isFinite(seconds)) {
     // There is no representation for a non-finite instant; reject with a
-    // typed error.
+    // typed error (the reference saturates NaN to the epoch and panics on ±∞).
     throw CborError.invalidDate("non-finite timestamp");
+  }
+  if (seconds < MIN_TIMESTAMP_SECONDS || seconds >= MAX_TIMESTAMP_SECONDS + 1) {
+    throw CborError.invalidDate("timestamp outside the representable range");
   }
   const whole = Math.trunc(seconds);
   let nsecs = Math.trunc((seconds - whole) * 1_000_000_000);
@@ -119,6 +227,10 @@ export class CborDate implements CborTagged {
    *
    * @returns A new `CborDate` instance
    *
+   * @throws `InvalidDate` for an invalid `Date` (`NaN` time) or one outside
+   *   the reference's representable range (±262143 years), which a chrono
+   *   value handed to `Date::from_datetime` can never be.
+   *
    * @example
    * ```typescript
    * const datetime = new Date();
@@ -126,8 +238,20 @@ export class CborDate implements CborTagged {
    * ```
    */
   static fromDate(dateTime: Date): CborDate {
+    const ms = dateTime.getTime();
+    // The reference's `from_datetime` receives a chrono value, which is
+    // always finite and within chrono's range; a JS `Date` can be invalid
+    // (NaN) or reach ±8.64e12 s, so those are rejected here as
+    // `fromEpochSeconds` rejects them.
+    if (!Number.isFinite(ms)) throw CborError.invalidDate("non-finite timestamp");
+    const whole = Math.floor(ms / 1000);
+    if (whole < MIN_TIMESTAMP_SECONDS || whole > MAX_TIMESTAMP_SECONDS) {
+      throw CborError.invalidDate("timestamp outside the representable range");
+    }
     const instance = new CborDate();
-    instance._seconds = dateTime.getTime() / 1000;
+    // `timestamp()`: whole seconds plus nanoseconds over 10⁹ (the
+    // millisecond part is exact in nanoseconds).
+    instance._seconds = whole + ((ms - whole * 1000) * 1_000_000) / 1_000_000_000;
     return instance;
   }
 
@@ -148,11 +272,11 @@ export class CborDate implements CborTagged {
    * const date = CborDate.fromYmd(2023, 2, 8);
    * ```
    *
-   * @throws Error if the provided components do not form a valid date.
+   * @throws `InvalidDate` if the components do not form a valid date (the
+   *   reference panics there).
    */
   static fromYmd(year: number, month: number, day: number): CborDate {
-    const dt = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
-    return CborDate.fromDate(dt);
+    return CborDate.fromYmdHms(year, month, day, 0, 0, 0);
   }
 
   /**
@@ -174,7 +298,10 @@ export class CborDate implements CborTagged {
    * const date = CborDate.fromYmdHms(2023, 2, 8, 15, 30, 45);
    * ```
    *
-   * @throws Error if the provided components do not form a valid date and time.
+   * @throws `InvalidDate` if the components do not form a valid date and time
+   *   — the checks the reference's `with_ymd_and_hms(…).unwrap()` panics on:
+   *   a year beyond ±262143, an impossible month or day, or a time past
+   *   23:59:59 (no leap second here; `fromString` accepts `:60`).
    */
   static fromYmdHms(
     year: number,
@@ -184,8 +311,11 @@ export class CborDate implements CborTagged {
     minute: number,
     second: number,
   ): CborDate {
-    const dt = new Date(Date.UTC(year, month - 1, day, hour, minute, second, 0));
-    return CborDate.fromDate(dt);
+    const seconds = civilSeconds(year, month, day, hour, minute, second);
+    if (seconds === undefined) throw CborError.invalidDate("Invalid date components");
+    const instance = new CborDate();
+    instance._seconds = seconds;
+    return instance;
   }
 
   /**
@@ -225,17 +355,30 @@ export class CborDate implements CborTagged {
    * Creates a new `CborDate` from a string containing an ISO-8601 (RFC-3339)
    * date (with or without time).
    *
-   * This method parses a string representation of a date or date-time in
-   * ISO-8601/RFC-3339 format and creates a new `CborDate` instance. It
-   * supports both full date-time strings (e.g., "2023-02-08T15:30:45Z")
-   * and date-only strings (e.g., "2023-02-08").
+   * Accepts exactly what the reference's `Date::from_string` accepts:
+   *
+   * - An RFC 3339 date-time (`2023-02-08T15:30:45Z`, `…45.123456789+05:30`),
+   *   with `T`, `t` or a space between date and time, up to nine fraction
+   *   digits kept (further digits are ignored), `Z`/`z` or an offset within
+   *   ±23:59, and the `:60` leap second (read as second 59 plus one second,
+   *   as chrono represents it).
+   * - A bare date read as UTC midnight, in chrono's `%Y-%m-%d` form: one to
+   *   four year digits or a signed year of any length (`-0001-01-01`,
+   *   `+12023-02-08`), one- or two-digit month and day, with whitespace
+   *   allowed before each number (`2023-2-8`, ` 2023-02-08`).
+   *
+   * The fraction is kept exactly: the stored timestamp is the reference's
+   * `timestamp()` — whole seconds plus nanoseconds over 10⁹ — so a decimal
+   * fraction encodes to the same bytes on both sides.
    *
    * @param value - A string containing a date or date-time in ISO-8601/RFC-3339
    *   format
    *
    * @returns A new `CborDate` instance if parsing succeeds
    *
-   * @throws Error if the string cannot be parsed as a valid date or date-time
+   * @throws `InvalidDate` if the string cannot be parsed as a valid date or
+   *   date-time (an impossible calendar date, a time past `23:59:60`, an
+   *   offset beyond ±23:59, a missing offset, or trailing characters).
    *
    * @example
    * ```typescript
@@ -247,40 +390,47 @@ export class CborDate implements CborTagged {
    * ```
    */
   static fromString(value: string): CborDate {
-    // Accept only strict RFC-3339 date-times (with seconds and an explicit
-    // `Z`/±HH:MM offset) or bare `YYYY-MM-DD` dates (read as UTC midnight).
-    // The plain `new Date()` parser is far more lenient (and engine-dependent),
-    // so we gate it behind explicit regexes.
-    const invalidDate = CborError.invalidDate("Invalid date string");
+    const invalidDate = (): CborError => CborError.invalidDate("Invalid date string");
 
-    // RFC-3339 date-time: `YYYY-MM-DDThh:mm:ss[.frac](Z|±hh:mm)`.
-    const rfc3339 = /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$/;
-    // Date-only: `YYYY-MM-DD`.
-    const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
-
-    let parsed: Date;
-    if (rfc3339.test(value)) {
-      parsed = new Date(value);
-    } else if (dateOnly.test(value)) {
-      // Treat a bare date as UTC midnight (00:00:00 UTC).
-      parsed = new Date(`${value}T00:00:00Z`);
-    } else {
-      throw invalidDate;
+    // RFC 3339 first, as the reference tries `DateTime::parse_from_rfc3339`
+    // before the bare-date form.
+    const dt = RFC3339.exec(value);
+    if (dt !== null) {
+      const [, y, mo, d, h, mi, sec, frac = "", sign, oh, om] = dt;
+      let second = Number(sec);
+      // `scan::nanosecond`: the digits scaled to nanoseconds; `:60` is the
+      // leap second, second 59 plus 1_000_000_000 ns (`from_hms_nano_opt`
+      // accepts up to 1_999_999_999).
+      let nanoseconds = frac === "" ? 0 : Number(frac.padEnd(9, "0"));
+      if (second === 60) {
+        second = 59;
+        nanoseconds += 1_000_000_000;
+      }
+      // `timezone_offset` + `FixedOffset::east_opt`: minutes 00–59, and the
+      // whole offset under 24 h (so hours 00–23).
+      const offsetHours = sign === undefined ? 0 : Number(oh);
+      const offsetMinutes = sign === undefined ? 0 : Number(om);
+      if (offsetHours > 23 || offsetMinutes > 59) throw invalidDate();
+      const offset = (sign === "+" ? 1 : -1) * (offsetHours * 3_600 + offsetMinutes * 60);
+      const whole = civilSeconds(Number(y), Number(mo), Number(d), Number(h), Number(mi), second);
+      if (whole === undefined) throw invalidDate();
+      const instance = new CborDate();
+      instance._seconds = whole - offset + nanoseconds / 1_000_000_000;
+      return instance;
     }
 
-    // `new Date` rolls impossible dates over (`2023-02-30` becomes Mar 2)
-    // rather than failing, so check the `YYYY-MM-DD` portion is a real calendar
-    // date. The first 10 chars are always `YYYY-MM-DD` given the regexes above.
-    const [y, m, d] = value.slice(0, 10).split("-").map(Number);
-    const probe = new Date(Date.UTC(y, m - 1, d));
-    const calendarValid =
-      probe.getUTCFullYear() === y && probe.getUTCMonth() === m - 1 && probe.getUTCDate() === d;
-
-    // ...and reject any residual unparseable input (e.g. an out-of-range time).
-    if (!calendarValid || isNaN(parsed.getTime())) {
-      throw invalidDate;
+    const ymd = YMD.exec(value);
+    if (ymd !== null) {
+      const [, sign, signedYear, plainYear, mo, d] = ymd;
+      const year = sign === undefined ? Number(plainYear) : Number(`${sign}${signedYear}`);
+      const whole = civilSeconds(year, Number(mo), Number(d), 0, 0, 0);
+      if (whole === undefined) throw invalidDate();
+      const instance = new CborDate();
+      instance._seconds = whole;
+      return instance;
     }
-    return CborDate.fromDate(parsed);
+
+    throw invalidDate();
   }
 
   /**
@@ -466,13 +616,16 @@ export class CborDate implements CborTagged {
     // Only handle numeric types (Unsigned, Negative, Float); others are invalid for dates
     switch (cbor.type) {
       case MajorType.Unsigned:
-        timestamp = typeof cbor.value === "number" ? cbor.value : Number(cbor.value);
+        // The reference converts through `f64::exact_from_u64`: an integer
+        // that `f64` cannot hold exactly is `OutOfRange`.
+        timestamp = typeof cbor.value === "number" ? cbor.value : exactNumber(cbor.value);
         break;
 
       case MajorType.Negative:
-        // Convert stored magnitude back to actual negative value
+        // Convert stored magnitude back to actual negative value (the same
+        // exactness rule applies to the magnitude).
         if (typeof cbor.value === "bigint") {
-          timestamp = Number(-cbor.value - 1n);
+          timestamp = -exactNumber(cbor.value) - 1;
         } else {
           timestamp = -cbor.value - 1;
         }
@@ -570,23 +723,26 @@ export class CborDate implements CborTagged {
    * ```
    */
   toString(): string {
-    const dt = new Date(this._seconds * 1000);
-    // Check only hours, minutes, and seconds (not milliseconds).
-    const hasTime = dt.getUTCHours() !== 0 || dt.getUTCMinutes() !== 0 || dt.getUTCSeconds() !== 0;
-
-    if (!hasTime) {
-      // Midnight (with possible subsecond precision) - show only date
-      const datePart = dt.toISOString().split("T")[0];
-      if (datePart === undefined) {
-        throw CborError.custom("Invalid ISO string format");
-      }
-      return datePart;
-    } else {
-      // Show full ISO datetime without milliseconds (seconds precision).
-      const iso = dt.toISOString();
-      // Remove milliseconds: "2023-02-08T15:30:45.000Z" -> "2023-02-08T15:30:45Z"
-      return iso.replace(/\.\d{3}Z$/, "Z");
-    }
+    // The reference's `Display`: `%Y-%m-%d` when the clock reads 00:00:00
+    // (a fraction of a second does not count), otherwise RFC 3339 to the
+    // second with `Z`. The year is four digits for 0–9999 and a sign plus at
+    // least four digits beyond (`-0004`, `+12023`); JS `toISOString` would
+    // print six digits there.
+    const total = Math.floor(this._seconds);
+    const days = Math.floor(total / 86_400);
+    const secondOfDay = total - days * 86_400;
+    const [year, month, day] = civilFromDays(days);
+    const pad = (n: number, width = 2): string => String(n).padStart(width, "0");
+    const y =
+      year >= 0 && year <= 9_999
+        ? pad(year, 4)
+        : `${year < 0 ? "-" : "+"}${pad(Math.abs(year), 4)}`;
+    const date = `${y}-${pad(month)}-${pad(day)}`;
+    if (secondOfDay === 0) return date;
+    const hour = Math.floor(secondOfDay / 3_600);
+    const minute = Math.floor((secondOfDay % 3_600) / 60);
+    const second = secondOfDay % 60;
+    return `${date}T${pad(hour)}:${pad(minute)}:${pad(second)}Z`;
   }
 
   /**

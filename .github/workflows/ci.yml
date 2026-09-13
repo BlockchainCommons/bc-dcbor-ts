@@ -1,18 +1,18 @@
-name: Release
+name: Continuous Integration
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
-  id-token: write
-
-on:
-  release:
-    types: [published]
 
 jobs:
-  publish:
-    name: Build and Publish
+  build:
+    name: Build, Test and Analyze
     runs-on: ubuntu-latest
-    environment: npm
 
     steps:
       - name: Checkout
@@ -27,10 +27,18 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Check formatting
+        run: bun run format:check
+
+      - name: Run linter
+        run: bun run lint
+
+      - name: Type check
+        run: bun run typecheck
 
       - name: Build
         run: bun run build
@@ -38,20 +46,14 @@ jobs:
       - name: Run tests
         run: bun run test
 
-      - name: Run linting
-        run: bun run lint
+      - name: Check public API surface
+        run: bun run api:check
+
+      - name: Check bundle size
+        run: bun run size
 
       - name: Validate package
         run: bun run lint:pkg
 
-      - name: Publish to NPM
-        run: npm publish --tag beta
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Tag published version as latest
-        run: |
-          package_spec=$(node -p 'const pkg = require("./package.json"); pkg.name + "@" + pkg.version')
-          npm dist-tag add "$package_spec" latest
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Check dependency hygiene
+        run: bun run check:deps

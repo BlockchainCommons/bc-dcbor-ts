@@ -548,42 +548,42 @@ describe("Tag summarizer", () => {
 
   // Register tags before summarizer tests
   it("summarizer positive bignum", () => {
-    registerStandardTags();
+    registerStandardTags(undefined, { bignum: true });
     const encoded = biguintToCbor(256n);
     const diag = diagnostic(encoded, summarizerOpts);
     expect(diag).toBe("bignum(256)");
   });
 
   it("summarizer negative bignum", () => {
-    registerStandardTags();
+    registerStandardTags(undefined, { bignum: true });
     const encoded = bigintToCbor(-256n);
     const diag = diagnostic(encoded, summarizerOpts);
     expect(diag).toBe("bignum(-256)");
   });
 
   it("summarizer zero", () => {
-    registerStandardTags();
+    registerStandardTags(undefined, { bignum: true });
     const encoded = biguintToCbor(0n);
     const diag = diagnostic(encoded, summarizerOpts);
     expect(diag).toBe("bignum(0)");
   });
 
   it("summarizer negative one", () => {
-    registerStandardTags();
+    registerStandardTags(undefined, { bignum: true });
     const encoded = bigintToCbor(-1n);
     const diag = diagnostic(encoded, summarizerOpts);
     expect(diag).toBe("bignum(-1)");
   });
 
   it("summarizer large positive", () => {
-    registerStandardTags();
+    registerStandardTags(undefined, { bignum: true });
     const encoded = biguintToCbor(1n << 64n);
     const diag = diagnostic(encoded, summarizerOpts);
     expect(diag).toBe("bignum(18446744073709551616)");
   });
 
   it("summarizer large negative", () => {
-    registerStandardTags();
+    registerStandardTags(undefined, { bignum: true });
     const big2_64 = 1n << 64n;
     const big = -(big2_64 + 1n);
     const encoded = bigintToCbor(big);

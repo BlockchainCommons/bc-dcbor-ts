@@ -163,12 +163,25 @@ const isGroup = (i: DiagItem): boolean => i.kind === "group";
 
 const containsGroup = (i: DiagItem): boolean => i.kind === "group" && i.items.some(isGroup);
 
+/**
+ * The UTF-8 length of a rendered item (the reference measures `str::len()`,
+ * bytes, not UTF-16 units), without encoding it.
+ */
+const utf8Length = (text: string): number => {
+  let n = 0;
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    n += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+  }
+  return n;
+};
+
 const totalStringsLen = (i: DiagItem): number =>
-  i.kind === "item" ? i.value.length : i.items.reduce((acc, c) => acc + totalStringsLen(c), 0);
+  i.kind === "item" ? utf8Length(i.value) : i.items.reduce((acc, c) => acc + totalStringsLen(c), 0);
 
 const greatestStringsLen = (i: DiagItem): number =>
   i.kind === "item"
-    ? i.value.length
+    ? utf8Length(i.value)
     : i.items.reduce((acc, c) => Math.max(acc, totalStringsLen(c)), 0);
 
 /**

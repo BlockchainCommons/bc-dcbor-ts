@@ -1,7 +1,7 @@
 # Divergences from the Rust reference implementation
 
 `@blockchaincommons/dcbor` is a port of [bc-dcbor-rust](https://github.com/BlockchainCommons/bc-dcbor-rust)
-(crate `dcbor`). It's committed golden wire vectors (`tests/vectors/*.json`)
+(crate `dcbor`). Its committed golden wire vectors (`tests/vectors/*.json`)
 have been cross-validated against the Rust reference, **pinned at
 `dcbor = 0.25.2`**, using the harness in `tests/rust-validation/`:
 
@@ -10,30 +10,32 @@ cd tests/rust-validation
 cargo run --release -- ../vectors
 ```
 
-Validation result (2026-07-15):
+Validation result (2026-09-13):
 
 ```
-encode: 346 vectors - 328 match, 6 emulated-throw, 11 skipped (JS-only), 1 expected-divergence, 0 MISMATCH
+encode: 403 vectors - 357 match, 34 emulated-throw, 11 skipped (JS-only), 1 expected-divergence, 0 MISMATCH
 decode: 241 vectors - 241 match, 0 expected-divergence, 0 MISMATCH
 ```
 
-Every byte that the two implementations can both produce is **identical**, and all
-177 decode rejections agree **error-code-for-error-code** - including the
-subtle frozen behaviors that look like porting artifacts but are genuine Rust
-parity:
+The compared wire vectors match except for the documented date case. All
+177 decode rejections in this corpus match by error code, and the 34
+emulated throws are inputs both sides reject (the harness runs the
+reference's constructor — `Date::from_string`, `BigUint` parsing — and
+expects the port's error code). This verifies the selected fixtures, not
+every possible input. Bare-float reduction quirks, negative zero, canonical
+NaN, infinities, float-width selection, and the date-string grammar are
+covered by the corpus.
 
-- the `Math.fround(-1 - n)` negative float reduction (mirror of Rust's
-  `-1f32 - n`), including its byte **collisions** (e.g. the bare-Float value
-  `-16777218.0` encodes as the bytes of semantic `-16777217`);
-- f32-exact whole values ≥ 2³² staying `0xfa` floats in the bare-Float
-  encoding ladder (no integer reduction), even though the decoder then
-  rejects those very bytes as non-canonical;
-- `-0.0` reducing to integer `0x00` (sign lost);
-- canonical NaN `f97e00`, ±Infinity `f97c00`/`f9fc00`, all f16/f32/f64
-  shortest-form selection edges and subnormals.
+The harness compares bytes and error codes. Format output — diagnostic
+notation in its flat, annotated and summarised modes, and annotated hex —
+was validated by execution against the reference over a 35-value probe
+corpus during the 1.0.0-beta.2 review; the rows that differed (the
+line-breaking threshold, which counts UTF-8 bytes on both sides) are pinned
+in `tests/format.test.ts`, and since 1.0.0-beta.2 every row matches.
+`CborDate.toString()` was validated the same way (§1.3).
 
-This document records everything that does **not** match 1:1, in three
-classes. The machine-readable twin of class 1 is the
+This document records known differences and JavaScript input mappings.
+The date-vector exception is recorded in the
 `expected_divergences()` allowlist in `tests/rust-validation/src/main.rs` -
 keep the two in sync.
 
@@ -41,26 +43,54 @@ keep the two in sync.
 
 ## 1. True behavioral divergences (same input, different outcome)
 
-These are cases where both implementations can process the same conceptual
-input but deliberately (or incidentally) behave differently. They are frozen
-TS behavior: the API redesign must preserve them, and any change is a
-wire-behavior change requiring the full vector-suite gate.
+These cases differ in accepted inputs or error handling. Changes should be
+reviewed against both the TypeScript tests and the Rust reference.
 
-### 1.1 Non-finite date timestamps: TS guards, Rust saturates
+### 1.1 Non-finite and out-of-range date timestamps: TS guards, Rust saturates or panics
 
 | input | @blockchaincommons/dcbor | dcbor (Rust) |
 |---|---|---|
-| `CborDate.fromEpochSeconds(NaN)` / `(±Infinity)` (`fromTimestamp`) | throws `InvalidDate` ("non-finite timestamp") | `Date::from_timestamp` saturating-casts (NaN → epoch `0`, encodes `c100`) |
+| `CborDate.fromEpochSeconds(NaN)` (`from_timestamp`) | throws `InvalidDate` ("non-finite timestamp") | saturating-casts NaN to epoch `0`, encodes `c100` |
+| `CborDate.fromEpochSeconds(±Infinity)` | throws `InvalidDate` | **panics** (`No such local time`, `date.rs:191`: `timestamp_opt(…).unwrap()`) |
+| a finite timestamp outside chrono's range `[-8334601228800, 8210266876799]` s, at construction (`fromEpochSeconds`, `fromDate`) or decode (`c11b000007779a0a6b80`) | throws `InvalidDate` ("timestamp outside the representable range") | **panics** (`from_timestamp`); a chrono value given to `from_datetime` cannot be outside it |
+| `CborDate.fromDate(new Date(NaN))` (`from_datetime`) | throws `InvalidDate` ("non-finite timestamp") | no analog: a chrono `DateTime` is always valid |
+| impossible components — `fromYmd(2023, 13, 1)`, `fromYmdHms(…, 10, 30, 60)`, a year beyond ±262143 (`from_ymd`, `from_ymd_hms`) | throws `InvalidDate` ("Invalid date components") | **panics** (`with_ymd_and_hms(…).unwrap()`) |
+| decode of an integer timestamp `f64` cannot hold exactly (`c11b7fffffffffffffff`) | throws `OutOfRange` | `OutOfRange` (`f64::exact_from_u64`) — identical |
 
-**Why:** the TS port added an explicit finiteness guard; Rust's
-`Date::from_timestamp` does `trunc() as i64` / `fract() * 1e9 as u32`, and Rust
-float→int casts saturate, silently yielding a valid (but almost certainly
-unintended) date. The TS behavior is deliberately stricter.
+**Why:** the reference's `Date::from_timestamp` does `trunc() as i64` /
+`fract() * 1e9 as u32` (saturating casts) and then `unwrap`s chrono's
+`timestamp_opt`, so only NaN yields a (wrong) date and everything else
+outside the range panics. The port rejects all of it with its
+own `InvalidDate` at the same point (construction or decode) and reports the
+reference's `OutOfRange` where the reference does; every accepted value also
+renders (`toString()` never throws). Executed on the reference at the exact
+bounds (`+262142-12-31T23:59:59Z` and `-262143-01-01` decode on both sides;
+one second beyond panics there). A fallible Rust constructor would allow callers to handle these invalid inputs.
 
-**Affected vectors:** `date/non-finite-throws` (1 encode vector; also the
-`date-nonfinite-*` differential corpus entries).
+**Affected vectors:** `date/non-finite-throws` (1 encode vector). The
+differential corpus (`tests/corpus/corpus.ts`) carries no date recipes.
 
 ---
+
+### 1.2 Tag registration errors
+
+An unnamed tag or a tag value re-registered with a different name throws
+`CborError` with code `Custom` in TypeScript. Rust uses an assertion or panic.
+Both reject the registration, but the error mechanism differs. This is covered
+by `tests/tags-store.test.ts`, not by the wire-vector allowlist.
+
+### 1.3 A parsed leap second displays differently until it is encoded
+
+`CborDate.fromString("2023-12-25T10:30:60Z").toString()` prints
+`2023-12-25T10:31:00Z`; the reference's `Date` prints `2023-12-25T10:30:60Z`.
+chrono keeps the leap second as second 59 plus a second of nanoseconds,
+while the port stores the timestamp — which is what both sides encode
+(`c11a658959e4`, identical). After a CBOR round trip the reference prints
+`10:31:00Z` too (executed). Every other `Display` row matches: `%Y-%m-%d`
+when the clock reads 00:00:00 (a fraction of a second does not count),
+otherwise RFC 3339 to the second, years outside 0–9999 with a sign and at
+least four digits (`-0004-02-29`, `+12023-02-08`); pinned in
+`tests/date.test.ts`.
 
 ## 2. JS-only input domain (no Rust analog exists)
 
@@ -74,18 +104,16 @@ The Rust harness **skips** them.
 | function passed to `cbor()` | throws `Custom` | `unsupported/function-throws` |
 | malformed bare Cbor node (`{isCbor: true, type: ByteString, value: 42}`) | throws `WrongType` at encode | `rawbad/malformed-bytestring-node-throws` |
 
-Related JS-only behaviors that DO have a byte-comparable target and were
-validated against Rust via their mapping (class 3 below): `undefined`,
-lone surrogates, JS `Set`/`Map` inputs, `{tag, value}` sniffing, protocol
-objects.
+Section 3 describes additional input mappings and rejected legacy protocol
+shapes; the rejected legacy shapes are also skipped by the harness.
 
 ---
 
 ## 3. Mapping equivalences (JS-specific inputs validated via their byte-target)
 
 These are JS-specific input *routes* whose output bytes were validated
-against the equivalent Rust construction. The byte-level wire behavior
-matches Rust exactly; only the input-side convenience/coercion is TS-specific.
+against the equivalent Rust construction. Where a row has a Rust byte target, the corpus compares those bytes.
+Rows documenting rejected legacy inputs are TypeScript-only checks.
 
 | JS-specific input | maps to (validated against Rust) | notes / vector |
 |---|---|---|
@@ -103,19 +131,35 @@ matches Rust exactly; only the input-side convenience/coercion is TS-specific.
 | number vs bigint input forms | JS `number` follows Rust's `From<f64>` semantics; JS `bigint` follows `CBORCase` integer construction | e.g. the **number** literal `18446744073709551615` is the double 2⁶⁴ → float `fa5f800000` in both (`From<f64>` parity), while `18446744073709551615n` → `1bffffffffffffffff`. `int/u64-max-as-number-is-float` |
 
 `CborDate.fromString` was validated directly against Rust's
-`Date::from_string`: both accept strict RFC 3339 (with mandatory offset) and
-bare `YYYY-MM-DD`, and both reject the same malformed inputs
-(`datestr/invalid-throws`, `datestr/missing-offset-throws` → `InvalidDate`).
+`Date::from_string` by execution (66 strings, byte-identical outcomes; the
+`datestr/*` vectors run each form through the reference): the RFC 3339 form
+keeps nine fraction digits and the `:60` leap second, takes `T`/`t`/space
+and `−` (U+2212) in the offset, and bounds the offset by ±23:59; the bare
+form is chrono's `%Y-%m-%d` (one- or two-digit month and day, a signed year
+of any length, whitespace before each number); both reject the same
+malformed inputs (`datestr/invalid-throws`, `datestr/missing-offset-throws`
+→ `InvalidDate`). The stored timestamp is the reference's `timestamp()`
+arithmetic — whole seconds plus nanoseconds over 10⁹ — and `fromDate`
+computes a JS `Date`'s milliseconds the same way, so a fraction encodes to
+the same bytes as `Date::from_datetime`. The impossible-component and
+leap-second-display cases are §1.1 and §1.3.
+
+- **Standard tags 2 and 3.** The reference names `positive-bignum` /
+  `negative-bignum` (and summarises `bignum(…)`) only when built with its
+  `num-bigint` feature; when that feature is disabled, a Rust peer prints `2(h'…')` and annotates `# tag(2)`. Since
+  1.0.0-beta.2 `registerStandardTags(store)` matches that, and
+  `registerStandardTags(store, { bignum: true })` matches the `num-bigint`
+  build (executed: identical output in both configurations).
 
 ---
 
 ## Maintenance
 
 - **Adding vectors:** if a new vector diverges from Rust, either it is a bug
-  (fix it) or it belongs in one of the classes above - document it HERE and
+  (fix it) or it belongs in one of the classes above - document it here and, when the wire harness covers it,
   add it to `expected_divergences()` in `tests/rust-validation/src/main.rs`
   in the same change.
 - **Re-run the cross-validation** after every fixture regeneration
-  (`bun run vectors:generate`) at proof re-baseline.
+  (`bun run vectors:generate`) and update this document when the result changes.
 - **Version pin:** the harness pins `dcbor = 0.25.2`. When bumping, re-run
   and update the header of this file with the new result line.

@@ -494,3 +494,25 @@ describe("format tests", () => {
     );
   });
 });
+
+describe("diagnostic line breaking measures strings in UTF-8 bytes (review N1)", () => {
+  // `diag.rs`: a group breaks when it contains a group, or its strings total
+  // more than 20 *bytes*, or its greatest child does. Executed on the
+  // reference for every row below.
+  it("breaks a group whose strings exceed 20 bytes although not 20 characters", () => {
+    expect(diagnostic(cbor(["unicode ✓ ☺ 日本"]))).toBe('[\n    "unicode ✓ ☺ 日本"\n]'); // 14 chars, 22 bytes
+    expect(diagnostic(cbor(new Map([["k", "unicode ✓ ☺ 日本"]])))).toBe(
+      '{\n    "k":\n    "unicode ✓ ☺ 日本"\n}',
+    );
+    expect(diagnostic(cbor(["✓✓✓✓", "☺☺☺☺"]))).toBe('[\n    "✓✓✓✓",\n    "☺☺☺☺"\n]'); // 8 chars, 24 bytes
+  });
+  it("keeps a group on one line at or under 20 rendered bytes (the quotes count)", () => {
+    expect(diagnostic(cbor(["eighteen chars!!!!"]))).toBe('["eighteen chars!!!!"]'); // 18 + 2 quotes = 20 bytes
+    expect(diagnostic(cbor(["twenty characters!!!"]))).toBe('[\n    "twenty characters!!!"\n]'); // 22 rendered
+    expect(diagnostic(cbor(new Map([["😀", "😀😀😀"]])))).toBe('{"😀": "😀😀😀"}'); // 16 bytes
+    expect(diagnostic(cbor(["unicode ✓"]))).toBe('["unicode ✓"]'); // 11 bytes
+  });
+  it("flat output is unaffected", () => {
+    expect(diagnostic(cbor(["unicode ✓ ☺ 日本"]), { flat: true })).toBe('["unicode ✓ ☺ 日本"]');
+  });
+});

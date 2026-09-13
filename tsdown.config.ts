@@ -3,8 +3,6 @@ import { defineConfig } from "tsdown";
 export default defineConfig({
   entry: ["src/index.ts", "src/diagnostic.ts", "src/walk.ts", "src/debug.ts"],
   outDir: "dist",
-  // P3.18: IIFE dropped - IIFE entries can't share chunks and would fork the
-  // tags-store singleton across entries (verified hazard).
   format: ["cjs", "esm"],
   dts: true,
   inputOptions: {
@@ -19,7 +17,4 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   target: "es2022",
-  // P1.4: the former `deps.alwaysBundle` / `outputOptions.globals` blocks
-  // referenced packages ("byte-data", "collections/sorted-map") that are not
-  // dependencies of this zero-dependency library - verified no-op, removed.
 });

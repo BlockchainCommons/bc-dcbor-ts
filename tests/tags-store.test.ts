@@ -131,3 +131,37 @@ describe("TagsStore", () => {
     });
   });
 });
+
+describe("registerStandardTags: the bignum tags are opt-in (review N3)", () => {
+  it("names only the date tag by default, as the reference without num-bigint", async () => {
+    const { registerStandardTags, TAG_DATE, TAG_POSITIVE_BIGNUM, TAG_NEGATIVE_BIGNUM } =
+      await import("../src/tags");
+    const store = new TagsStore();
+    registerStandardTags(store);
+    expect(store.tagForValue(TAG_DATE)?.name).toBe("date");
+    expect(store.tagForValue(TAG_POSITIVE_BIGNUM)).toBeUndefined();
+    expect(store.tagForValue(TAG_NEGATIVE_BIGNUM)).toBeUndefined();
+    expect(store.summarizer(BigInt(TAG_POSITIVE_BIGNUM))).toBeUndefined();
+  });
+  it("names them with { bignum: true }, as the reference's num-bigint build", async () => {
+    const { registerStandardTags, TAG_POSITIVE_BIGNUM, TAG_NEGATIVE_BIGNUM } =
+      await import("../src/tags");
+    const store = new TagsStore();
+    registerStandardTags(store, { bignum: true });
+    expect(store.tagForValue(TAG_POSITIVE_BIGNUM)?.name).toBe("positive-bignum");
+    expect(store.tagForValue(TAG_NEGATIVE_BIGNUM)?.name).toBe("negative-bignum");
+    expect(store.summarizer(BigInt(TAG_POSITIVE_BIGNUM))).toBeDefined();
+  });
+  it("a registration conflict is the package's CborError (review N4)", async () => {
+    const { CborError } = await import("../src");
+    const store = new TagsStore();
+    store.register(Tag.from(100, "first-name"));
+    try {
+      store.register(Tag.from(100, "different-name"));
+      expect.unreachable();
+    } catch (e) {
+      expect(CborError.isCborError(e)).toBe(true);
+      expect(CborError.isCborError(e) && e.code).toBe("Custom");
+    }
+  });
+});

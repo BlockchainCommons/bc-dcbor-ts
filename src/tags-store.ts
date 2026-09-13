@@ -10,7 +10,7 @@
 import { type Cbor } from "./cbor";
 import { type CborNumber } from "./cbor-types";
 import type { Tag } from "./tag";
-import type { CborError } from "./error";
+import { CborError } from "./error";
 
 /**
  * Result type for summarizer functions: a summary string or a CborError.
@@ -136,7 +136,7 @@ export class TagsStore implements ReadonlyTagsStore {
 
     // A tag must carry a non-empty name to be registered.
     if (name === undefined || name === "") {
-      throw new Error(`Tag ${tag.value} must have a non-empty name`);
+      throw CborError.custom(`Tag ${tag.value} must have a non-empty name`);
     }
 
     const key = this._valueKey(tag.value);
@@ -144,7 +144,7 @@ export class TagsStore implements ReadonlyTagsStore {
 
     // Reject re-registering the same value under a conflicting name.
     if (existing?.name !== undefined && existing.name !== name) {
-      throw new Error(
+      throw CborError.custom(
         `Attempt to register tag: ${tag.value} '${existing.name}' with different name: '${name}'`,
       );
     }

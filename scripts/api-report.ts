@@ -2,8 +2,8 @@
  * Public API report via @microsoft/api-extractor (P1.2).
  *
  * Usage:
- *   bun scripts/api-report.mjs --local   # (re)generate api/dcbor.api.md
- *   bun scripts/api-report.mjs           # verify the committed report matches
+ *   bun scripts/api-report.ts --local   # (re)generate api/dcbor.api.md
+ *   bun scripts/api-report.ts           # verify the committed report matches
  *
  * api-extractor requires a `.d.ts` entry point; tsdown emits `.d.mts`, so a
  * transient copy is made inside dist/ first. The committed report

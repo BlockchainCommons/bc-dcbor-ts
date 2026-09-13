@@ -2,6 +2,7 @@ version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
+    reviewers: ["leonardocustodio"]
     schedule:
       interval: "weekly"
     labels: [ "dependencies" ]
@@ -10,11 +11,12 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: github-actions
-    directory: '/'
-    labels: [ "gh-actions" ]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    reviewers: ["leonardocustodio"]
     schedule:
-      interval: weekly
+      interval: "weekly"
+    labels: [ "gh-actions" ]
     groups:
       gh-actions:
         patterns:

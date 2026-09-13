@@ -93,6 +93,7 @@ export {
   TAG_DATE,
   TAG_NAME_DATE,
   registerStandardTags,
+  type RegisterStandardTagsOptions,
   tagsForValues,
 } from "./tags";
 
