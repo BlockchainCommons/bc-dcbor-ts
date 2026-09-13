@@ -54,7 +54,7 @@ interface DiagFormatOpts {
  *   "use the default")
  * @public
  */
-declare function diagnostic(input: Cbor | WalkElement, opts?: DiagFormatOpts): string;
+export declare function diagnostic(input: Cbor | WalkElement, opts?: DiagFormatOpts): string;
 //#endregion
 //#region src/dump.d.ts
 /**
@@ -78,7 +78,7 @@ interface HexFormatOpts {
  * @param opts - Formatting options (explicit `undefined` fields mean
  *   "use the default")
  */
-declare const hexAnnotated: (cbor: Cbor, opts?: HexFormatOpts) => string;
+export declare const hexAnnotated: (cbor: Cbor, opts?: HexFormatOpts) => string;
 //#endregion
-export { type DiagFormatOpts, type HexFormatOpts, diagnostic, hexAnnotated };
+export type { DiagFormatOpts, HexFormatOpts };
 //# sourceMappingURL=diagnostic.d.mts.map
