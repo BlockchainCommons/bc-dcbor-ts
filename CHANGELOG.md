@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-beta.3 - 2026-09-14
+
+Closes the listed divergences below from `dcbor` 0.25.2;
+the Rust harness now replays encode, decode, format, date and
+unsigned vectors under both reference builds in CI.
 
 ### Changed
 
@@ -57,7 +61,7 @@
 
 - `expectUnsigned(cbor, { width, wrapNegative })` extracts into a fixed
   width like `u8`…`u64::try_from`, including the reference's wrap of a
-  negative integer (`-1` → `255` at width 8; RUST_DIVERGENCES.md §1.1).
+  negative integer (`-1` → `255` at width 8).
   Without options the behaviour is unchanged.
 - `TagsStore.clone()` mirrors `#[derive(Clone)]`: an independent copy that
   shares frozen tags and summarizer functions.
