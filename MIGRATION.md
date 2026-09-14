@@ -246,19 +246,3 @@ precedent). Tagged types keep `cborTags()` / `untaggedCbor()` /
 The prefix grammar is policy (CONTRIBUTING.md): `is*` = narrowing guard,
 `as*` = `T | undefined`, `expect*` = `T` or throw `CborError`,
 `try*` = returns `Result`, never throws.
-
-## 11. What did NOT change
-
-The wire format (byte-for-byte, including every decoder rejection and its
-error code); the accessor names that already followed the grammar
-(`isMap`, `asText`, `expectArray`, `hasTag`, `getTaggedContent`,
-`expectTaggedContent`, `tagValue`, `tagContent`, `arrayItem`, `arrayLength`,
-`mapKeys`, `mapValues`, `mapSize`, …); `extractCbor` (now typed
-`CborNative`); the bignum functions (tags 2/3); `encodeVarInt`/`decodeVarInt`;
-`sortArrayByCborEncoding`; `cborEquals`; `bytesToHex`/`hexToBytes` names;
-`getGlobalTagsStore` and all lookup names; `TAG_DATE`, `TAG_POSITIVE_BIGNUM`
-and `TAG_NEGATIVE_BIGNUM`;
-`CborDate`'s `fromYmd`/`fromYmdHms`/`fromString`/`now`/`add`/`subtract`/
-`difference`/`equals`/`compare`/`toString`/`toJSON`; `CborSet`'s algebra
-(`union`/`intersection`/`difference`/`isSubsetOf`/`isSupersetOf`); and
-`walk`'s state-cloning visitor semantics (`@beta`).

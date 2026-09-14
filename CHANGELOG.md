@@ -2,10 +2,6 @@
 
 ## Unreleased
 
-Closes every behavioral difference from `dcbor` 0.25.2 that the Rust harness
-can observe. The harness now runs in two builds (default and `num-bigint`)
-over five fixture files, and its divergence allowlist is empty.
-
 ### Changed
 
 - **Decoding keeps a leading U+FEFF** in a text string, as the reference's
@@ -36,8 +32,7 @@ over five fixture files, and its divergence allowlist is empty.
   `MIN`). `fromUntaggedCbor`/`fromTaggedCbor` return a new instance.
 - **`CborDate.fromEpochSeconds(NaN)` and a decoded tag-1 `NaN` are the
   epoch** (`c100`, `1970-01-01`), as the reference's saturating cast makes
-  them; ±Infinity is still `InvalidDate` (the reference panics). This
-  reverses the 1.0.0-beta.2 guard.
+  them; ±Infinity is still `InvalidDate` (the reference panics).
 - **`WrongTag` errors name both tags as the reference does.** `CborDate`'s
   expected tag carries the global store's name for tag 1 (`date` once
   `registerStandardTags()` has run, else `1`); `taggedValue(tag, …)` keeps a

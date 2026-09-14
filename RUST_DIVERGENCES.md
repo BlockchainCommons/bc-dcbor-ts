@@ -74,7 +74,7 @@ contract. Neither kind is a divergence and neither is recorded here.
 These cases differ in accepted inputs or error handling. Changes should be
 reviewed against both the TypeScript tests and the Rust reference.
 
-### 1.1 Negative integers converted to unsigned (reference defect)
+### 1.1 Negative integers converted to unsigned
 
 The reference's `u8`…`u64` `TryFrom<CBOR>` wraps a negative integer instead
 of rejecting it (`int.rs`, `Ok((-1 - a) as $type)`; executed:
@@ -85,7 +85,7 @@ beyond the width (harness `uint` vectors). Without options,
 `expectUnsigned` still throws `WrongType` for any negative integer. A
 consumer that ports a field decoded with `u*::try_from` records whether it
 matches the wrap: bc-components-ts uses the helper, and bc-known-values-ts
-records its choice. Reported upstream (issue link pending).
+records its choice.
 
 ### 1.2 Hex input tolerates whitespace
 
@@ -106,8 +106,7 @@ The reference's `exact_from_f16` for `i16` tests `source <= -32768.0`
 (`exact.rs`), so `-32768.0`, which binary16 represents exactly, is `None`,
 while `exact_from_f32(-32768.0)` and `exact_from_f64(-32768.0)` are
 `Some(-32768)`. `ExactI16.exactFromF16(-32768)` is `undefined` to match;
-`tests/exact.test.ts` pins it. Nothing on the wire depends on it. Reported
-upstream (issue link pending).
+`tests/exact.test.ts` pins it. Nothing on the wire depends on it.
 
 ---
 
