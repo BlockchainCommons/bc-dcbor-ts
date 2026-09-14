@@ -1,40 +1,6 @@
 /**
- * Walk Module Integration Tests - 1:1 translation from Rust's tests/walk.rs
- *
- * This file contains comprehensive integration tests for the `walk` module.
- *
- * ## Test Coverage
- *
- * ### Basic Functionality
- * - **test_traversal_counts**: Verifies correct visit counts for different
- *   CBOR structures (arrays, maps, tagged values, nested structures)
- * - **test_visitor_state_threading**: Tests that visitor state is properly
- *   maintained through traversal
- * - **test_primitive_values**: Ensures primitive values are handled correctly
- * - **test_empty_structures**: Tests behavior with empty arrays and maps
- *
- * ### Traversal Semantics
- * - **test_traversal_order_and_edge_types**: Validates the order of visits and
- *   correct edge type labeling
- * - **test_map_keyvalue_semantics**: Verifies that map key-value pairs are
- *   visited both as semantic units and individually
- * - **test_tagged_value_traversal**: Tests traversal of tagged values and
- *   nested tagged structures
- *
- * ### Advanced Features
- * - **test_depth_limited_traversal**: Tests depth-limited traversal using the
- *   level parameter
- * - **test_early_termination**: Demonstrates controlled termination using the
- *   stop flag to prevent descent into children
- * - **test_stop_flag_prevents_descent**: Verifies that the stop flag
- *   consistently prevents descent into children while allowing sibling
- *   traversal
- *
- * ### Real-World Usage
- * - **test_text_extraction**: Extracts all text strings from a complex nested
- *   structure
- * - **test_real_world_document**: Tests traversal of a realistic JSON-like
- *   document structure converted to CBOR
+ * Walk tests, ported from Rust's tests/walk.rs and the unit tests in
+ * src/walk.rs.
  */
 
 import type { CborInput } from "../src";
@@ -66,7 +32,6 @@ function countVisits(cborValue: CborInput): number {
 }
 
 describe("walk tests", () => {
-  /// Test basic traversal counts for different CBOR structures
   test("test_traversal_counts", () => {
     // Simple array
     const array = [1, 2, 3];
@@ -108,7 +73,6 @@ describe("walk tests", () => {
     expect(count4).toBe(12);
   });
 
-  /// Test that visitor state is properly threaded through traversal
   test("test_visitor_state_threading", () => {
     const array = [1, 2, 3, 4, 5];
 
@@ -137,7 +101,6 @@ describe("walk tests", () => {
     expect(evenCount).toBe(2); // 2 and 4 are even
   });
 
-  /// Test early termination using visitor pattern
   test("test_early_termination", () => {
     // Test shows that stop flag prevents descent into children but doesn't
     // abort entire walk
@@ -219,7 +182,6 @@ describe("walk tests", () => {
     expect(level2AfterThird.length).toBe(0);
   });
 
-  /// Test depth-limited traversal using level parameter
   test("test_depth_limited_traversal", () => {
     // Create deeply nested structure
     const level3 = new CborMap();
@@ -254,7 +216,6 @@ describe("walk tests", () => {
     expect(elementsByLevel[3] || 0).toBe(0); // No visits at level 3 due to stop
   });
 
-  /// Test text extraction from complex CBOR structures
   test("test_text_extraction", () => {
     // Create a complex structure with text at various levels
     const metadata = new CborMap();
@@ -318,7 +279,6 @@ describe("walk tests", () => {
     expect(texts).toContain("tags");
   });
 
-  /// Test traversal order and edge types
   test("test_traversal_order_and_edge_types", () => {
     const map = new CborMap();
     map.set("a", [1, 2]);
@@ -366,7 +326,6 @@ describe("walk tests", () => {
     expect(hasArrayElement1).toBe(true);
   });
 
-  /// Test tagged value traversal
   test("test_tagged_value_traversal", () => {
     // Create nested tagged values
     const innerTagged = taggedValue(123, [1, 2, 3]);
@@ -417,7 +376,6 @@ describe("walk tests", () => {
     if (edge5.type === "array_element") expect(edge5.index).toBe(2);
   });
 
-  /// Test map key-value semantics
   test("test_map_keyvalue_semantics", () => {
     const map = new CborMap();
     map.set("simple", 42);
@@ -450,7 +408,6 @@ describe("walk tests", () => {
     expect(individualCount).toBe(4);
   });
 
-  /// Test stop flag prevents descent consistently
   test("test_stop_flag_prevents_descent", () => {
     const nested = [
       [1, 2, 3], // Index 0: prevent descent into this
@@ -509,7 +466,6 @@ describe("walk tests", () => {
     expect(hasLevel2From789).toBe(true);
   });
 
-  /// Test empty structures
   test("test_empty_structures", () => {
     // Empty array
     const emptyArray: number[] = [];
@@ -522,7 +478,6 @@ describe("walk tests", () => {
     expect(count2).toBe(1); // Just the root
   });
 
-  /// Test primitive values
   test("test_primitive_values", () => {
     const primitives = [42, "hello", 3.2222, true, null];
 
@@ -532,7 +487,6 @@ describe("walk tests", () => {
     }
   });
 
-  /// Test real-world document structure
   test("test_real_world_document", () => {
     // Simulate a JSON-like document converted to CBOR
     const person = new CborMap();
@@ -610,8 +564,7 @@ describe("walk tests", () => {
     expect(strings).toContain("languages");
   });
 
-  /// Root array: visit count and exact positional edge ordering
-  /// (port of src/walk.rs `test_walk_array`)
+  // Port of src/walk.rs `test_walk_array`: visit count and positional edges.
   test("test_walk_array", () => {
     const edges: EdgeTypeVariant[] = [];
     let count = 0;
@@ -638,8 +591,7 @@ describe("walk tests", () => {
     }
   });
 
-  /// Single-level tagged value: visit count and edge sequence
-  /// (port of src/walk.rs `test_walk_tagged`)
+  // Port of src/walk.rs `test_walk_tagged`.
   test("test_walk_tagged", () => {
     const tagged = taggedValue(0, "2023-01-01T00:00:00Z");
 
@@ -664,8 +616,7 @@ describe("walk tests", () => {
     expect(edges[1]?.type).toBe("tagged_content"); // Content
   });
 
-  /// Nested map-with-array visit count (port of src/walk.rs
-  /// `test_walk_nested_structure`)
+  // Port of src/walk.rs `test_walk_nested_structure`.
   test("test_walk_nested_structure", () => {
     const map = new CborMap();
     map.set("numbers", [1, 2, 3]);
@@ -676,7 +627,7 @@ describe("walk tests", () => {
     expect(countVisits(map)).toBe(10);
   });
 
-  /// Edge-type labels (port of src/walk.rs `test_edge_type_labels`)
+  // Port of src/walk.rs `test_edge_type_labels`.
   test("test_edge_type_labels", () => {
     expect(edgeLabel({ type: "none" })).toBeUndefined();
     expect(edgeLabel({ type: "array_element", index: 5 })).toBe("arr[5]");

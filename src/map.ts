@@ -1,26 +1,15 @@
 /**
- * Map Support in dCBOR
+ * A deterministic CBOR map: maps with the same content encode identically,
+ * regardless of insertion order.
  *
- * A deterministic CBOR map implementation that ensures maps with the same
- * content always produce identical binary encodings, regardless of insertion
- * order.
- *
- * ## Deterministic Map Representation
- *
- * The `CborMap` type follows strict deterministic encoding rules as specified by
- * dCBOR:
- *
- * - Map keys are always sorted in lexicographic order of their encoded CBOR bytes
- * - Duplicate keys are not allowed (enforced by the implementation)
+ * - Entries are kept in lexicographic order of their encoded key bytes
+ * - Setting a key whose encoding is already present replaces that entry
  * - Keys and values can be any type that can be converted to CBOR
- * - Numeric reduction is applied (e.g., 3.0 is stored as integer 3)
- *
- * ## Vocabulary
  *
  * `CborMap` mirrors the JS `Map` protocol: `set`, `get`, `getOrThrow`, `has`,
  * `delete`, `clear`, `size`, `keys()`, `values()`, `entries()`, `forEach`,
- * iteration. `get` returns the STORED `Cbor` node (symmetric with
- * `entries()`); extract natives explicitly with `extractCbor(map.get(k))`.
+ * iteration. `get` returns the stored `Cbor` node, like `entries()`; extract
+ * natives explicitly with `extractCbor(map.getOrThrow(k))`.
  *
  * @module map
  */
@@ -97,10 +86,9 @@ export class CborMap {
   }
 
   /**
-   * Get the STORED `Cbor` node for a key, or `undefined` if absent.
+   * Get the stored `Cbor` node for a key, or `undefined` if absent.
    *
-   * This is symmetric with `entries()` - no hidden native extraction, no
-   * unwitnessed generics. To read a native value, compose explicitly:
+   * To read a native value, compose explicitly:
    *
    * ```typescript
    * asNumber(map.get("age"));          // number | undefined, checked
@@ -160,6 +148,30 @@ export class CborMap {
     }));
   }
 
+  /**
+   * The stored entry at position `i` in canonical ascending encoded-key
+   * order; the caller keeps `i` within `[0, size)`.
+   *
+   * @internal Positional access for the encoder and for structural equality,
+   * which walk a map (or two maps in lockstep) without materializing
+   * `entriesArray`; not part of the supported surface.
+   */
+  entryAt(i: number): MapEntry {
+    return this._dict.valueAt(i);
+  }
+
+  /**
+   * The encoded CBOR bytes of the key at position `i` - the bytes the entry
+   * is sorted by, computed once when it was inserted.
+   *
+   * @internal The encoder writes these directly, as the reference's
+   * `Map::cbor_data` writes its stored `MapKey`, instead of re-encoding the
+   * key node; not part of the supported surface.
+   */
+  encodedKeyAt(i: number): Uint8Array {
+    return this._dict.keyAt(i);
+  }
+
   /** Iterate keys in canonical (sorted encoded-key) order. */
   *keys(): Generator<Cbor, void, undefined> {
     for (const entry of this.entriesArray) {
@@ -198,11 +210,12 @@ export class CborMap {
   }
 
   /**
-   * Inserts the next key-value pair into the map during decoding.
-   * This is used for efficient map building during CBOR decoding.
-   * Throws if the key is not in ascending order or is a duplicate.
+   * Append a key-value pair whose encoded key must sort strictly after every
+   * existing key.
    *
    * @internal The decoder's append path; not part of the supported surface.
+   * @throws {CborError} `DuplicateMapKey` for a repeated key,
+   *   `MisorderedMapKey` for a key out of ascending order.
    */
   setNext(key: CborInput, value: CborInput): void {
     const keyCbor = cbor(key);

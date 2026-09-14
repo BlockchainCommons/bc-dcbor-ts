@@ -28,17 +28,25 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import * as src from "../src/index.ts";
+import { diagnostic } from "../src/diag.ts";
+import { hexAnnotated } from "../src/dump.ts";
 import {
-  redesignedAdapterFor,
+  currentAdapterFor,
+  decodeErrorMessage,
   decodeOutcome,
   encodeOutcome,
   hexToBytes,
+  materialize,
+  bytesToHex,
 } from "../tests/vectors/recipes.ts";
 import { encodeCorpus } from "../tests/vectors/encode-corpus.ts";
 import { decodeCorpus } from "../tests/vectors/decode-corpus.ts";
+import { formatCorpus, type FormatConfig } from "../tests/vectors/format-corpus.ts";
+import { dateCorpus } from "../tests/vectors/date-corpus.ts";
+import { uintCorpus } from "../tests/vectors/uint-corpus.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const api = redesignedAdapterFor(src);
+const api = currentAdapterFor(src);
 
 /** Above this many bytes, fixtures store a digest instead of full hex. */
 const DIGEST_THRESHOLD_BYTES = 512;
@@ -81,10 +89,10 @@ for (const entry of encodeCorpus) {
     expect = { ok: false, code: outcome.code };
   } else {
     // Round-trip lock: encoder output must decode and re-encode
-    // byte-identically (dCBOR determinism) - EXCEPT the frozen bare-Float
-    // quirk where the float ladder emits 0xfa floats for whole values that
-    // the decoder's canonicality re-encode then rejects. Those are pinned
-    // with `decodeRejects` so the quirk itself is frozen.
+    // byte-identically (dCBOR determinism). An output the decoder rejects is
+    // pinned with `decodeRejects` instead of failing the run; no current
+    // fixture needs it, but the escape hatch stays so such a quirk is
+    // recorded deliberately rather than silently.
     const back = decodeOutcome(api, hexToBytes(outcome.hex));
     let decodeRejects;
     if (!back.ok) {
@@ -125,10 +133,11 @@ for (const entry of decodeCorpus) {
       problems.push(`decode ${entry.name}: expected accept, got ${actual.code}`);
       continue;
     }
-    if (actual.hex !== entry.hex) {
-      problems.push(
-        `decode ${entry.name}: accepted but re-encoded to ${actual.hex} (not byte-identical)`,
-      );
+    // Accepts re-encode byte-identically unless the entry pins the bytes
+    // the decoded node re-encodes to (whole-valued float heads -> integers).
+    const want = entry.expect.hex ?? entry.hex;
+    if (actual.hex !== want) {
+      problems.push(`decode ${entry.name}: accepted but re-encoded to ${actual.hex}, expected ${want}`);
       continue;
     }
   } else {
@@ -147,7 +156,108 @@ for (const entry of decodeCorpus) {
       continue;
     }
   }
-  decodeFixtures.push({ name: entry.name, hex: entry.hex, expect: entry.expect, note: entry.note });
+  // Rejections also pin the error message: the reference's `Display` text
+  // is part of the contract (the Rust harness compares `e.to_string()`).
+  const expect = entry.expect.ok
+    ? entry.expect
+    : { ...entry.expect, message: decodeErrorMessage(api, hexToBytes(entry.hex)) };
+  decodeFixtures.push({ name: entry.name, hex: entry.hex, expect, note: entry.note });
+}
+
+// ---------------------------------------------------------------------------
+// Format fixtures - the five textual renderings under a chosen tags store.
+// ---------------------------------------------------------------------------
+
+const storeFor = (config: FormatConfig): src.TagsStore => {
+  const store = new src.TagsStore();
+  if (config === "standard") src.registerStandardTags(store);
+  if (config === "standard+bignum") src.registerStandardTags(store, { bignum: true });
+  return store;
+};
+
+const formatFixtures = [];
+for (const entry of formatCorpus) {
+  let value: src.Cbor;
+  if ("hex" in entry.input) {
+    value = src.decodeCbor(hexToBytes(entry.input.hex));
+  } else {
+    try {
+      value = src.cbor(materialize(entry.input.recipe, api) as src.CborInput);
+    } catch (e) {
+      problems.push(`format ${entry.name}: recipe does not construct (${String(e)})`);
+      continue;
+    }
+  }
+  const store = storeFor(entry.config);
+  const tags = entry.config === "none" ? "none" : store;
+  formatFixtures.push({
+    name: entry.name,
+    input: entry.input,
+    config: entry.config,
+    ...(entry.build === undefined ? {} : { build: entry.build }),
+    expect: {
+      hex: bytesToHex(src.encodeCbor(value)),
+      diagnostic: diagnostic(value, { tags }),
+      annotated: diagnostic(value, { annotate: true, tags }),
+      flat: diagnostic(value, { flat: true, tags }),
+      summary: diagnostic(value, { summarize: true, tags }),
+      hexAnnotated: hexAnnotated(value, { tagsStore: store }),
+    },
+    ...(entry.note === undefined ? {} : { note: entry.note }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Date fixtures - CborDate decode and display.
+// ---------------------------------------------------------------------------
+
+const errorOutcome = (e: unknown): { ok: false; code: string; message: string } => {
+  const code = api.errorCode(e);
+  if (code === undefined) throw e;
+  return { ok: false, code, message: (e as Error).message };
+};
+
+const dateFixtures = [];
+for (const entry of dateCorpus) {
+  let expect;
+  if (entry.kind === "decode") {
+    try {
+      const date = src.CborDate.fromTaggedCbor(src.decodeCbor(hexToBytes(entry.hex)));
+      expect = { ok: true, hex: bytesToHex(src.encodeCbor(date.toCbor())), display: date.toString() };
+    } catch (e) {
+      expect = errorOutcome(e);
+    }
+    dateFixtures.push({ name: entry.name, kind: entry.kind, hex: entry.hex, expect, ...(entry.note === undefined ? {} : { note: entry.note }) });
+  } else {
+    try {
+      const date = materialize(entry.recipe, api) as src.CborDate;
+      expect = { ok: true, hex: bytesToHex(src.encodeCbor(date.toCbor())), display: date.toString() };
+    } catch (e) {
+      const { code } = errorOutcome(e);
+      expect = { ok: false, code };
+    }
+    dateFixtures.push({ name: entry.name, kind: entry.kind, recipe: entry.recipe, expect, ...(entry.note === undefined ? {} : { note: entry.note }) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Unsigned-extraction fixtures - expectUnsigned(cbor, { width, wrapNegative }).
+// ---------------------------------------------------------------------------
+
+const uintFixtures = [];
+for (const entry of uintCorpus) {
+  let expect;
+  try {
+    const value = src.expectUnsigned(src.decodeCbor(hexToBytes(entry.hex)), {
+      width: entry.width,
+      wrapNegative: true,
+    });
+    expect = { ok: true, value: String(value) };
+  } catch (e) {
+    const { code } = errorOutcome(e);
+    expect = { ok: false, code };
+  }
+  uintFixtures.push({ name: entry.name, hex: entry.hex, width: entry.width, expect, ...(entry.note === undefined ? {} : { note: entry.note }) });
 }
 
 if (problems.length > 0) {
@@ -170,6 +280,18 @@ writeFileSync(
   join(root, "tests/vectors/decode-vectors.json"),
   JSON.stringify({ ...meta(decodeFixtures.length), vectors: decodeFixtures }, null, 1) + "\n",
 );
+writeFileSync(
+  join(root, "tests/vectors/format-vectors.json"),
+  JSON.stringify({ ...meta(formatFixtures.length), vectors: formatFixtures }, null, 1) + "\n",
+);
+writeFileSync(
+  join(root, "tests/vectors/date-vectors.json"),
+  JSON.stringify({ ...meta(dateFixtures.length), vectors: dateFixtures }, null, 1) + "\n",
+);
+writeFileSync(
+  join(root, "tests/vectors/uint-vectors.json"),
+  JSON.stringify({ ...meta(uintFixtures.length), vectors: uintFixtures }, null, 1) + "\n",
+);
 
 const throwing = encodeFixtures.filter((f) => !f.expect.ok).length;
 const digests = encodeFixtures.filter((f) => f.expect.ok && f.expect.sha256).length;
@@ -178,5 +300,12 @@ console.log(
 );
 console.log(
   `decode-vectors.json: ${decodeFixtures.length} vectors (${decodeFixtures.filter((f) => !f.expect.ok).length} rejections)`,
+);
+console.log(`format-vectors.json: ${formatFixtures.length} vectors`);
+console.log(
+  `date-vectors.json: ${dateFixtures.length} vectors (${dateFixtures.filter((f) => !f.expect.ok).length} rejections)`,
+);
+console.log(
+  `uint-vectors.json: ${uintFixtures.length} vectors (${uintFixtures.filter((f) => !f.expect.ok).length} rejections)`,
 );
 console.log(`source commit: ${sourceCommit}`);

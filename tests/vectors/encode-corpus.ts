@@ -1,34 +1,29 @@
 /**
- * Curated golden ENCODE corpus (API_REDESIGN_PLAN P1.1a).
+ * Curated golden ENCODE corpus.
  *
  * Every entry is a named, build-agnostic construction recipe. The generator
- * (`scripts/generate-vectors.mjs`) encodes each with the working tree and
+ * (`scripts/generate-vectors.ts`) encodes each with the working tree and
  * commits the expected outcome (hex, or CborError code for inputs that throw)
  * to `tests/vectors/encode-vectors.json`; `tests/golden-vectors.test.ts`
  * verifies the working tree against that fixture on every run.
  *
- * Entries marked `tombstone` are the two input shapes the redesign will make
- * throw (P3.5 `{tag,value}` sniffing, P3.7 `taggedCbor`-without-`toCbor`
- * auto-wrap). They MUST keep their baseline bytes until the breaking wave
- * lands; the golden test asserts them via the same fixture, and flipping them
- * to expected-throw is a deliberate, reviewed fixture regeneration.
+ * Entries marked `tombstone` are the two input shapes that throw a directive
+ * `Custom` error: a plain `{tag, value}` object literal and an object with
+ * `taggedCbor()` but no `toCbor()`. The Rust harness skips them.
  *
- * Sources for the boundary/quirk values: live-verified recon of
- * src/float.ts + src/varint.ts + src/cbor.ts dispatch (see P1.1 notes in
- * API_REDESIGN_PLAN.md §6). The three frozen encoder quirks deliberately
- * covered:
+ * The encoder quirks deliberately covered:
  *   Q1 f32 negative reduction uses Math.fround(-1-n) (Rust parity), which
- *      COLLIDES byte-wise for f32-exact negatives beyond 2^24
+ *      collides byte-wise for f32-exact negatives beyond 2^24
  *      (e.g. -16777218.0 encodes as semantic -16777217);
- *   Q2 f32-exact whole values >= 2^32 do NOT integer-reduce (stay 0xfa);
+ *   Q2 f32-exact whole values >= 2^32 do not integer-reduce (stay 0xfa);
  *   Q3 -0.0 encodes as integer 0x00 (sign lost).
  * Q1/Q2 live in the float encoder's own reduction ladder, which plain whole
- * numbers NEVER reach (cbor() dispatch integer-reduces them exactly first) -
+ * numbers never reach (cbor() dispatch integer-reduces them exactly first) -
  * they are pinned via the bare-Float-node vectors in section 2b. Q3 is
  * visible through both routes.
  */
 
-import type { Recipe } from "./recipes";
+import type { Recipe, RemovedInputShape } from "./recipes";
 
 // Terse constructors - keep the table readable.
 const n = (v: number | string): Recipe => ({ k: "n", v: String(v) });
@@ -67,11 +62,11 @@ const taggedproto = (tag: string | number, inner: Recipe): Recipe => ({
 export interface EncodeCorpusEntry {
   name: string;
   recipe: Recipe;
-  /** Set on the two redesign tombstone shapes (P3.5 / P3.7). */
-  tombstone?: "P3.5" | "P3.7";
+  /** Set on the removed input shapes, which throw a directive error. */
+  tombstone?: RemovedInputShape;
 }
 
-const e = (name: string, recipe: Recipe, tombstone?: "P3.5" | "P3.7"): EncodeCorpusEntry =>
+const e = (name: string, recipe: Recipe, tombstone?: RemovedInputShape): EncodeCorpusEntry =>
   tombstone === undefined ? { name, recipe } : { name, recipe, tombstone };
 
 // ---------------------------------------------------------------------------
@@ -143,7 +138,7 @@ const integers: EncodeCorpusEntry[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// 2. Floats - every f16/f32/f64 canonical edge and the three frozen quirks.
+// 2. Floats - every f16/f32/f64 canonical edge and the three quirks.
 //    (The full 77-value adversarial pool also runs in the differential
 //    corpus; these are the named, committed subset.)
 // ---------------------------------------------------------------------------
@@ -187,7 +182,7 @@ const FLOAT_POOL_VALUES: string[] = [
   "6.097555160522461e-5", // max f16 subnormal
   "5.960464477539063e-8", // min f16 subnormal
   "5.960464477539064e-8", // next double up - NOT f16-exact → f64
-  "2.9802322387695312e-8", // below min f16 subnormal → f32? (frozen behavior)
+  "2.9802322387695312e-8", // below min f16 subnormal
   // f32 precision cliff at 2^24. NOTE: whole values here integer-reduce in
   // cbor() DISPATCH (exact, no fround) - the Q1 fround collisions are only
   // reachable via bare Float nodes; see the float-simple section below.
@@ -249,7 +244,7 @@ const floats: EncodeCorpusEntry[] = FLOAT_POOL_VALUES.map((v) => e(`float/${v}`,
 // 2b. Bare Cbor nodes - the attachMethods passthrough arm, the float
 //     encoder's OWN reduction ladder (only reachable here: plain whole
 //     numbers integer-reduce in dispatch before f64CborData ever runs), and
-//     the frozen quirks Q1/Q2 that are invisible through normal dispatch.
+//     the quirks Q1/Q2 that are invisible through normal dispatch.
 // ---------------------------------------------------------------------------
 
 const fsimple = (v: string): Recipe => ({ k: "floatsimple", v });
@@ -287,7 +282,7 @@ const bareNodes: EncodeCorpusEntry[] = [
   e("rawnegmag/23-is-minus-24", { k: "rawnegmag", v: "23" }), // 0x37
   e("rawnegmag/u64-max-is-minus-2^64", { k: "rawnegmag", v: "18446744073709551615" }),
   e("rawbad/malformed-bytestring-node-throws", { k: "rawbad" }),
-  // Unsupported input types - frozen Custom throws.
+  // Unsupported input types throw Custom.
   e("unsupported/symbol-throws", { k: "symbol" }),
   e("unsupported/function-throws", { k: "fn" }),
 ];
@@ -331,6 +326,15 @@ const strings: EncodeCorpusEntry[] = [
   e("str/control-chars", s("\t\n\r")),
   e("str/lone-surrogate-becomes-replacement", s("\ud800")), // TextEncoder → U+FFFD
   e("str/448-byte-lorem-u16-head", sr("Lorem ipsum dolor sit amet, ", 16)), // 448 chars → 0x79 head
+  // Bare Text nodes bypass cbor(): NFC must still be applied by the ENCODER
+  // (Rust `cbor_data` parity), not only by the constructor.
+  e("rawtext/nfd-e-acute", { k: "rawtext", v: "é" }), // node holds 65cc81, encodes 62c3a9
+  e("rawtext/nfd-in-array", arr({ k: "rawtext", v: "é" })), // 8162c3a9
+  e("rawtext/nfc-passthrough", { k: "rawtext", v: "é" }), // already composed: 62c3a9
+  e("rawtext/ascii-fast-path", { k: "rawtext", v: "plain ascii" }),
+  // Map keys are compared by encoded bytes: an NFD key and its NFC form are
+  // the SAME key, so the second insert replaces the first (a1 62c3a9 02).
+  e("rawtext/map-nfd-then-nfc-key", map([{ k: "rawtext", v: "é" }, n(1)], [s("é"), n(2)])),
 ];
 
 // ---------------------------------------------------------------------------
@@ -441,8 +445,8 @@ const maps: EncodeCorpusEntry[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// 8. JS Sets - INSERTION ORDER is preserved on the wire (frozen behavior,
-//    distinct from CborSet's canonical sort).
+// 8. JS Sets - insertion order is preserved on the wire (distinct from
+//    CborSet's canonical sort).
 // ---------------------------------------------------------------------------
 
 const jsSets: EncodeCorpusEntry[] = [
@@ -517,7 +521,19 @@ const dates: EncodeCorpusEntry[] = [
   e("date/y2038-plus", date(2147483648)),
   e("date/far-future", date(10000000000)),
   e("date/sub-ns-precision-dropped", date(1.0000000001)),
-  e("date/non-finite-throws", date("NaN")),
+  // `from_timestamp` parity: NaN saturates to the epoch (`trunc() as i64`),
+  // ±Infinity is rejected (the reference panics; TS throws InvalidDate).
+  e("date/nan-saturates-to-epoch", date("NaN")), // c100
+  e("date/infinity-throws", date("Infinity")),
+  e("date/negative-infinity-throws", date("-Infinity")),
+  // The range check applies to the truncated whole seconds only, so a
+  // fraction below chrono's MIN still lands on MIN (executed on 0.25.2).
+  e("date/below-min-fraction-truncates", date("-8334601228800.5")), // c13b000007948cf211ff
+  e("date/below-min-fraction-999", date("-8334601228800.999")),
+  e("date/max-plus-fraction", date("8210266876799.5")),
+  e("date/max-plus-one-throws", date("8210266876800")),
+  e("date/min-minus-one-throws", date("-8334601228801")),
+  e("date/nanosecond-fraction-rounds-in-f64", date("1703500245.999999999")), // the f64 is …246
   e("datestr/bare-date", datestr("2023-02-08")),
   e("datestr/rfc3339-utc", datestr("2023-02-08T15:30:45Z")),
   e("datestr/rfc3339-offset", datestr("2023-02-08T15:30:45+05:30")),
@@ -598,16 +614,13 @@ const protocols: EncodeCorpusEntry[] = [
   e("tocbor/int", tocbor(n(42))),
   e("tocbor/map", tocbor(map([n(1), n(2)]))),
   e("tocbor/in-array", arr(tocbor(s("x")), n(1))),
-  // P3.7 tombstone shape: object with taggedCbor() and no toCbor().
-  e("taggedproto/simple", taggedproto(99, s("payload")), "P3.7"),
-  e("taggedproto/in-array", arr(taggedproto(99, n(1)), n(2)), "P3.7"),
-  e("taggedproto/as-map-value", map([s("k"), taggedproto(7, arr(n(1)))]), "P3.7"),
-  // Dispatch precedence: taggedCbor() wins over toCbor() today. The bytes
-  // reveal the winner (the toCbor side deliberately encodes differently).
-  // NOT tombstone-marked: post-P3.7 this shape doesn't throw - its bytes
-  // CHANGE (toCbor becomes the winner), and that flip lands as a reviewed
-  // fixture regeneration diff in the wave.
-  e("bothproto/taggedcbor-wins", { k: "bothproto", tag: "77", inner: s("x") }),
+  // Removed shape: object with taggedCbor() and no toCbor().
+  e("taggedproto/simple", taggedproto(99, s("payload")), "tagged-cbor-only"),
+  e("taggedproto/in-array", arr(taggedproto(99, n(1)), n(2)), "tagged-cbor-only"),
+  e("taggedproto/as-map-value", map([s("k"), taggedproto(7, arr(n(1)))]), "tagged-cbor-only"),
+  // Dispatch precedence: toCbor() wins over taggedCbor(). The bytes reveal
+  // the winner (the toCbor side deliberately encodes differently).
+  e("bothproto/tocbor-wins", { k: "bothproto", tag: "77", inner: s("x") }),
   // Inherited tag/value (outer sniff trigger fires, own-keys check does not):
   // falls through to the plain-object→map branch, encoding only own entries.
   e("protoobj/inherited-tag-value-is-map", {
@@ -626,12 +639,12 @@ const protocols: EncodeCorpusEntry[] = [
     ],
     ownEntries: [],
   }),
-  // P3.5 tombstone shape: plain {tag, value} object literal.
-  e("tagobjlit/number-tag", tagobjlit(n(1), s("Hello")), "P3.5"),
-  e("tagobjlit/nested-value", tagobjlit(n(100), arr(n(1), n(2))), "P3.5"),
-  e("tagobjlit/string-tag-coerces", tagobjlit(s("24"), n(0)), "P3.5"),
-  e("tagobjlit/in-array", arr(tagobjlit(n(1), n(2))), "P3.5"),
-  e("tagobjlit/as-obj-value", obj(["inner", tagobjlit(n(5), n(6))]), "P3.5"),
+  // Removed shape: plain {tag, value} object literal.
+  e("tagobjlit/number-tag", tagobjlit(n(1), s("Hello")), "tag-value-literal"),
+  e("tagobjlit/nested-value", tagobjlit(n(100), arr(n(1), n(2))), "tag-value-literal"),
+  e("tagobjlit/string-tag-coerces", tagobjlit(s("24"), n(0)), "tag-value-literal"),
+  e("tagobjlit/in-array", arr(tagobjlit(n(1), n(2))), "tag-value-literal"),
+  e("tagobjlit/as-obj-value", obj(["inner", tagobjlit(n(5), n(6))]), "tag-value-literal"),
 ];
 
 // ---------------------------------------------------------------------------

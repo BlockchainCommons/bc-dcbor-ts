@@ -16,14 +16,15 @@ import { MajorType } from "../src/cbor";
 function main() {
   console.log("=== Testing stop flag behavior ===\n");
 
-  // Create a nested structure to test stop behavior
+  // Stopping only prevents descent into the stopped element's children, so
+  // the siblings of "stop_here" are still visited.
   const innerMap = new CborMap();
   innerMap.set("inner_key", "inner_value");
 
   const map = new CborMap();
-  map.set("first", "stop_here"); // Will trigger stop
-  map.set("second", innerMap); // Should not be visited if stop works
-  map.set("third", [1, 2, 3]); // Should not be visited if stop works
+  map.set("first", "stop_here");
+  map.set("second", innerMap);
+  map.set("third", [1, 2, 3]);
   const cborData = cbor(map);
 
   console.log(`CBOR structure: ${diagnostic(cborData, { flat: true })}`);

@@ -1,7 +1,7 @@
 /**
  * Diagnostic Walk Example
  *
- * This example demonstrates using diagnostic_flat during tree traversal
+ * This example demonstrates flat diagnostic notation during tree traversal
  * to display CBOR elements at different nesting levels.
  *
  * Port of: bc-dcbor-rust/examples/diagnostic_walk.rs
@@ -13,8 +13,8 @@ import { walk, type EdgeTypeVariant, type WalkElement } from "../src/walk";
 import { diagnostic } from "../src/diag";
 
 function main() {
-  // Test with various CBOR structures to show diagnostic_flat works during
-  // traversal
+  // Various CBOR structures, each printed with `diagnostic(…, { flat: true })`
+  // as a whole and then element by element during traversal.
   const testCases: Array<[string, any]> = [
     ["Simple array", cbor([1, 2, 3])],
     [

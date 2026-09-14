@@ -1,16 +1,16 @@
 /**
- * Curated golden DECODE corpus (API_REDESIGN_PLAN P1.1a).
+ * Curated golden DECODE corpus.
  *
  * Byte sequences with the outcome `decodeCbor` must produce: acceptance
- * (in which case decode->re-encode must reproduce the input bytes exactly)
- * or rejection with a specific `CborError.code`. Covers every reachable
- * throw site in src/decode.ts (including the `checkCanonicalEncoding`
- * re-encode rejections and CborMap.setNext map-ordering errors), each
- * error propagated through nested containers, and the canonical-form
- * accepts that are easy to get wrong.
+ * (in which case decode->re-encode must reproduce the input bytes exactly,
+ * unless the entry pins a different `expect.hex` - whole-valued f32/f64 heads
+ * decode to integer nodes, as in the reference) or rejection with a specific
+ * `CborError.code`. Covers every reachable throw site in src/decode.ts
+ * (including the `checkCanonicalEncoding` re-encode rejections and
+ * CborMap.setNext map-ordering errors), each error propagated through nested
+ * containers, and the canonical-form accepts that are easy to get wrong.
  *
- * All vectors were machine-verified against the pre-redesign build; the
- * generator (`scripts/generate-vectors.mjs`) re-verifies each expectation
+ * The generator (`scripts/generate-vectors.ts`) re-verifies each expectation
  * and fails loudly on any mismatch before writing
  * `tests/vectors/decode-vectors.json`.
  */
@@ -18,7 +18,11 @@
 export interface DecodeCorpusEntry {
   name: string;
   hex: string;
-  expect: { ok: true } | { ok: false; code: string };
+  /**
+   * `ok: true` accepts and re-encodes to `hex` unless `expect.hex` names the
+   * bytes the decoded node re-encodes to instead.
+   */
+  expect: { ok: true; hex?: string } | { ok: false; code: string };
   note: string;
 }
 
@@ -27,19 +31,19 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/Underrun/(empty)",
     hex: "",
     expect: { ok: false, code: "Underrun" },
-    note: "empty input: readCbor L159 remaining<1",
+    note: "empty input",
   },
   {
     name: "reject/Underrun/18",
     hex: "18",
     expect: { ok: false, code: "Underrun" },
-    note: "uint 2-byte head, 0 of 1 arg bytes (L103)",
+    note: "uint 2-byte head, 0 of 1 arg bytes",
   },
   {
     name: "reject/Underrun/19",
     hex: "19",
     expect: { ok: false, code: "Underrun" },
-    note: "uint 3-byte head, 0 of 2 arg bytes (L112)",
+    note: "uint 3-byte head, 0 of 2 arg bytes",
   },
   {
     name: "reject/Underrun/1900",
@@ -51,13 +55,13 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/Underrun/1a000000",
     hex: "1a000000",
     expect: { ok: false, code: "Underrun" },
-    note: "uint 5-byte head, 3 of 4 arg bytes (L122)",
+    note: "uint 5-byte head, 3 of 4 arg bytes",
   },
   {
     name: "reject/Underrun/1b00000000000000",
     hex: "1b00000000000000",
     expect: { ok: false, code: "Underrun" },
-    note: "uint 9-byte head, 7 of 8 arg bytes (L134)",
+    note: "uint 9-byte head, 7 of 8 arg bytes",
   },
   {
     name: "reject/Underrun/38",
@@ -111,7 +115,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/Underrun/f9",
     hex: "f9",
     expect: { ok: false, code: "Underrun" },
-    note: "f16 head with no payload (hv25 dataRemaining<2)",
+    note: "f16 head with no payload",
   },
   {
     name: "reject/Underrun/f97e",
@@ -135,7 +139,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/Underrun/41",
     hex: "41",
     expect: { ok: false, code: "Underrun" },
-    note: "bytestring declares 1 body byte, has 0 (L181)",
+    note: "bytestring declares 1 body byte, has 0",
   },
   {
     name: "reject/Underrun/4401ff02",
@@ -147,7 +151,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/Underrun/61",
     hex: "61",
     expect: { ok: false, code: "Underrun" },
-    note: "text declares 1 body byte, has 0 (L192)",
+    note: "text declares 1 body byte, has 0",
   },
   {
     name: "reject/Underrun/626f",
@@ -213,7 +217,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/UnsupportedHeaderValue/1c",
     hex: "1c",
     expect: { ok: false, code: "UnsupportedHeaderValue" },
-    note: "major 0 headerValue 28 (L152), details.headerValue=28",
+    note: "major 0 headerValue 28, details.headerValue=28",
   },
   {
     name: "reject/UnsupportedHeaderValue/1d",
@@ -393,7 +397,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/NonCanonicalNumeric/1800",
     hex: "1800",
     expect: { ok: false, code: "NonCanonicalNumeric" },
-    note: "uint 0 in 2-byte head (value<24, L107)",
+    note: "uint 0 in 2-byte head (value<24)",
   },
   {
     name: "reject/NonCanonicalNumeric/1817",
@@ -405,7 +409,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/NonCanonicalNumeric/190017",
     hex: "190017",
     expect: { ok: false, code: "NonCanonicalNumeric" },
-    note: "uint 23 in 3-byte head (value<=0xff, L117)",
+    note: "uint 23 in 3-byte head (value<=0xff)",
   },
   {
     name: "reject/NonCanonicalNumeric/1900ff",
@@ -417,7 +421,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/NonCanonicalNumeric/1a00000017",
     hex: "1a00000017",
     expect: { ok: false, code: "NonCanonicalNumeric" },
-    note: "uint 23 in 5-byte head (value<=0xffff, L129)",
+    note: "uint 23 in 5-byte head (value<=0xffff)",
   },
   {
     name: "reject/NonCanonicalNumeric/1a0000ffff",
@@ -429,7 +433,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/NonCanonicalNumeric/1b0000000000000017",
     hex: "1b0000000000000017",
     expect: { ok: false, code: "NonCanonicalNumeric" },
-    note: "uint 23 in 9-byte head (value<=0xffffffff, L147)",
+    note: "uint 23 in 9-byte head (value<=0xffffffff)",
   },
   {
     name: "reject/NonCanonicalNumeric/1b00000000ffffffff",
@@ -543,7 +547,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/NonCanonicalNumeric/fb4045000000000000",
     hex: "fb4045000000000000",
     expect: { ok: false, code: "NonCanonicalNumeric" },
-    note: "42.0 as f64: re-encode reduces to int 182a (checkCanonicalEncoding L306)",
+    note: "42.0 as f64: re-encode reduces to int 182a (checkCanonicalEncoding)",
   },
   {
     name: "reject/NonCanonicalNumeric/fa42280000",
@@ -598,6 +602,24 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     hex: "fb43e0000000000000",
     expect: { ok: false, code: "NonCanonicalNumeric" },
     note: "2^63 as f64 reduces to uint 1b8000000000000000 (bigint reduction path)",
+  },
+  {
+    name: "reject/NonCanonicalNumeric/fa4f000000",
+    hex: "fa4f000000",
+    expect: { ok: false, code: "NonCanonicalNumeric" },
+    note: "2^31 as f32: `as i32` saturates to i32::MAX, which rounds back to exactly 2^31 -> whole -> rejected",
+  },
+  {
+    name: "reject/NonCanonicalNumeric/facf000000",
+    hex: "facf000000",
+    expect: { ok: false, code: "NonCanonicalNumeric" },
+    note: "-2^31 as f32: i32::MIN round-trips exactly -> rejected",
+  },
+  {
+    name: "reject/NonCanonicalNumeric/fbc3e0000000000000",
+    hex: "fbc3e0000000000000",
+    expect: { ok: false, code: "NonCanonicalNumeric" },
+    note: "-2^63 as f64: i64::MIN round-trips exactly -> rejected",
   },
   {
     name: "reject/NonCanonicalNumeric/fa3fc00000",
@@ -808,6 +830,57 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     hex: "61ff",
     expect: { ok: false, code: "InvalidUtf8" },
     note: "0xff is never valid in UTF-8",
+  },
+  // Utf8Error message coverage: a bad second byte, a bad later
+  // byte (error_len 2/3), an error after valid text (valid_up_to 3), and
+  // truncation inside a sequence ("incomplete").
+  {
+    name: "reject/InvalidUtf8/63e28228",
+    hex: "63e28228",
+    expect: { ok: false, code: "InvalidUtf8" },
+    note: "3-byte lead, valid second byte, invalid third: error_len 2",
+  },
+  {
+    name: "reject/InvalidUtf8/64f09f9841",
+    hex: "64f09f9841",
+    expect: { ok: false, code: "InvalidUtf8" },
+    note: "4-byte lead, two valid continuations, invalid fourth: error_len 3",
+  },
+  {
+    name: "reject/InvalidUtf8/63e0a041",
+    hex: "63e0a041",
+    expect: { ok: false, code: "InvalidUtf8" },
+    note: "e0 with valid second byte a0, invalid third: error_len 2",
+  },
+  {
+    name: "reject/InvalidUtf8/62f0a0",
+    hex: "62f0a0",
+    expect: { ok: false, code: "InvalidUtf8" },
+    note: "4-byte sequence cut after a valid second byte: incomplete",
+  },
+  {
+    name: "reject/InvalidUtf8/6441c3a9ff",
+    hex: "6441c3a9ff",
+    expect: { ok: false, code: "InvalidUtf8" },
+    note: "valid 'Aé' then ff: valid_up_to 3",
+  },
+  {
+    name: "reject/InvalidUtf8/64616263ff",
+    hex: "64616263ff",
+    expect: { ok: false, code: "InvalidUtf8" },
+    note: "valid 'abc' then ff: valid_up_to 3",
+  },
+  {
+    name: "reject/InvalidUtf8/62eda0",
+    hex: "62eda0",
+    expect: { ok: false, code: "InvalidUtf8" },
+    note: "ed with second byte a0 (surrogate range) and no third: the present bad byte beats incomplete",
+  },
+  {
+    name: "reject/InvalidUtf8/62c0af",
+    hex: "62c0af",
+    expect: { ok: false, code: "InvalidUtf8" },
+    note: "overlong lead c0: error_len 1 whatever follows",
   },
   {
     name: "reject/NonCanonicalString/6365cc81",
@@ -1214,6 +1287,82 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     expect: { ok: true },
     note: "2^64 exactly as f32 - whole-valued but exceeds u64 by 1, so no integer reduction",
   },
+  // Whole-valued f32/f64 heads beyond the saturating-cast bounds (Rust
+  // `validate_canonical_f32/f64` + `From<f32/f64>`): accepted, and the
+  // node is the integer the value reduces to (or stays a float when no
+  // integer fits), so the re-encoding may differ from the input.
+  {
+    name: "accept/fa4f000001-as-1a80000100",
+    hex: "fa4f000001",
+    expect: { ok: true, hex: "1a80000100" },
+    note: "2^31+256: `as i32` saturates to 2^31 != value, so accepted; From<f32> -> Unsigned(2147483904)",
+  },
+  {
+    name: "accept/fa4f7fffff-as-1affffff00",
+    hex: "fa4f7fffff",
+    expect: { ok: true, hex: "1affffff00" },
+    note: "2^32-256 (largest f32 below 2^32) -> Unsigned(4294967040)",
+  },
+  {
+    name: "accept/facf000001-as-3a80000100",
+    hex: "facf000001",
+    expect: { ok: true, hex: "3a80000100" },
+    note: "-(2^31+256): -1f32 - n rounds to 2^31+256 -> Negative(2147483904) = -2147483905",
+  },
+  {
+    name: "accept/fadf000000-as-3b8000000000000000",
+    hex: "fadf000000",
+    expect: { ok: true, hex: "3b8000000000000000" },
+    note: "-2^63 as f32: -1f32 - n rounds to 2^63 -> Negative(2^63) = -9223372036854775809 (65-bit)",
+  },
+  {
+    name: "accept/fadb000000-as-3b0080000000000000",
+    hex: "fadb000000",
+    expect: { ok: true, hex: "3b0080000000000000" },
+    note: "-2^55 as f32: -1f32 - n rounds to 2^55 -> Negative(2^55) = -36028797018963969",
+  },
+  {
+    name: "accept/fb43e0000000000001-as-1b8000000000000800",
+    hex: "fb43e0000000000001",
+    expect: { ok: true, hex: "1b8000000000000800" },
+    note: "2^63+2048: `as i64` saturates to i64::MAX -> 2^63 != value, accepted; From<f64> -> Unsigned",
+  },
+  {
+    name: "accept/fbc3e0000000000001-as-3b80000000000007ff",
+    hex: "fbc3e0000000000001",
+    expect: { ok: true, hex: "3b80000000000007ff" },
+    note: "-(2^63+2048): accepted via i64 saturation; From<f64> -> Negative(2^63+2047)",
+  },
+  {
+    name: "accept/fa4f800000",
+    hex: "fa4f800000",
+    expect: { ok: true },
+    note: "2^32 as f32: accepted (saturating i32 image differs); no u32 fits, so the node stays a float",
+  },
+  {
+    name: "accept/fa4fc00000",
+    hex: "fa4fc00000",
+    expect: { ok: true },
+    note: "1.5*2^32 as f32: whole, accepted, stays a float",
+  },
+  {
+    name: "accept/fa5a000000",
+    hex: "fa5a000000",
+    expect: { ok: true },
+    note: "2^53 as f32: whole, accepted, stays a float",
+  },
+  {
+    name: "accept/fa5f000000",
+    hex: "fa5f000000",
+    expect: { ok: true },
+    note: "2^63 as f32: whole, accepted, stays a float",
+  },
+  {
+    name: "accept/fadf800000",
+    hex: "fadf800000",
+    expect: { ok: true },
+    note: "-2^64 as f32: -1f32 - n rounds to 2^64, which no u64 holds, so the node stays a float",
+  },
   {
     name: "accept/fb3ff199999999999a",
     hex: "fb3ff199999999999a",
@@ -1268,6 +1417,24 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     hex: "62c3a9",
     expect: { ok: true },
     note: "NFC-composed é (U+00E9) - passes both UTF-8 and NFC checks",
+  },
+  {
+    name: "accept/64efbbbf61",
+    hex: "64efbbbf61",
+    expect: { ok: true },
+    note: 'text "\uFEFFa": a leading BOM is a character, kept on decode (Rust String::from_utf8 parity)',
+  },
+  {
+    name: "accept/63efbbbf",
+    hex: "63efbbbf",
+    expect: { ok: true },
+    note: "text consisting of only U+FEFF - re-encodes to the same 3 bytes, not to the empty string",
+  },
+  {
+    name: "accept/8263efbbbf63efbbbf",
+    hex: "8263efbbbf63efbbbf",
+    expect: { ok: true },
+    note: "two BOM-only strings in an array - each element keeps its BOM",
   },
   {
     name: "accept/8181818100",

@@ -1,5 +1,5 @@
-import { A as CborMap, C as CborDate, D as extractTaggedContent, E as decodeWith, F as isCborNaN, I as simpleName, M as CborNative, N as extractCbor, O as validateTag, P as Simple, S as isCborNumber, T as CborTagged, _ as CborTextType, a as taggedValue, b as ToCbor, c as CborArrayType, d as CborMapType, f as CborMethods, g as CborTaggedType, h as CborSimpleType, i as encodeCbor, j as MapEntry, k as ByteString, l as CborByteStringType, m as CborNumber, n as cbor, o as Tag, p as CborNegativeType, r as cborEquals, s as TagValue, t as Cbor, u as CborInput, v as CborUnsignedType, w as CborCodec, x as isCbor, y as MajorType } from "./cbor-D4SlBSmQ.mjs";
-import { a as TagsStoreOpt, c as CborError, d as CborErrorDetailsByCode, f as CborErrorTyped, h as Result, i as TagsStore, l as CborErrorCode, m as Ok, n as ReadonlyTagsStore, o as getGlobalTagsStore, p as Err, r as SummarizerResult, s as withTags, t as CborSummarizer, u as CborErrorDetails } from "./tags-store-D853hYTA.mjs";
+import { A as CborMap, C as CborDate, D as extractTaggedContent, E as decodeWith, F as isCborNaN, I as simpleName, M as CborNative, N as extractCbor, O as validateTag, P as Simple, S as isCborNumber, T as CborTagged, _ as CborTextType, a as taggedValue, b as ToCbor, c as CborArrayType, d as CborMapType, f as CborMethods, g as CborTaggedType, h as CborSimpleType, i as encodeCbor, j as MapEntry, k as ByteString, l as CborByteStringType, m as CborNumber, n as cbor, o as Tag, p as CborNegativeType, r as cborEquals, s as TagValue, t as Cbor, u as CborInput, v as CborUnsignedType, w as CborCodec, x as isCbor, y as MajorType } from "./cbor-CZgweoMn.mjs";
+import { a as TagsStoreOpt, c as CborError, d as CborErrorDetailsByCode, f as CborErrorTyped, h as Result, i as TagsStore, l as CborErrorCode, m as Ok, n as ReadonlyTagsStore, o as getGlobalTagsStore, p as Err, r as SummarizerResult, s as withTags, t as CborSummarizer, u as CborErrorDetails } from "./tags-store-8mi5mOuA.mjs";
 //#region src/hex.d.ts
 /**
  * Convert bytes to a lowercase hex string.
@@ -42,14 +42,14 @@ export declare const hexToBytes: (hexString: string) => Uint8Array<ArrayBuffer>;
  * @remarks Decoded byte strings are zero-copy views aliasing the input
  * buffer - mutating the input after decoding (or mutating the returned
  * bytes) changes the other side. Call `.slice()` first if you need an
- * independent copy. This is deliberate: the zero-copy decode performance
- * profile is part of the library's contract.
+ * independent copy.
  */
 export declare function decodeCbor(data: Uint8Array): Cbor;
 /**
  * Decode without throwing: returns a {@link Result} carrying the decoded value,
  * or the {@link CborError} that {@link decodeCbor} would have thrown. Non-CBOR
- * errors still propagate.
+ * errors still propagate - including the host's `RangeError` when a deeply
+ * nested input exhausts the call stack (the reference aborts there too).
  *
  * The `try` prefix means "returns `Result`, never throws" - everywhere in
  * this library.
@@ -88,9 +88,8 @@ export declare class CborSet {
    * Create a CborSet from any iterable of encodable items. Duplicates (by
    * canonical encoding) are removed.
    *
-   * NOTE: strings are iterable - `CborSet.from("abc")` is a THREE-element
-   * set of one-character strings, not a single-element set. Wrap in an
-   * array (`CborSet.from(["abc"])`) for the latter.
+   * Strings are iterable: `CborSet.from("abc")` is a three-element set of
+   * one-character strings. Use `CborSet.from(["abc"])` for a single element.
    */
   static from(items: Iterable<CborInput>): CborSet;
   /**
@@ -141,10 +140,8 @@ export declare class CborSet {
   isSupersetOf(other: CborSet): boolean;
   [Symbol.iterator](): Generator<Cbor, void, undefined>;
   /**
-   * Iterate the stored `Cbor` elements lazily in canonical order.
-   *
-   * NOTE: this yields the stored `Cbor` nodes. Use `toArray()` for an eager
-   * array of extracted native values.
+   * Iterate the stored `Cbor` elements lazily in canonical order. Use
+   * `toArray()` for an eager array of extracted native values.
    */
   values(): Generator<Cbor, void, undefined>;
   /** JS `Set.keys()` mirror - identical to `values()`. */
@@ -193,23 +190,11 @@ export declare class CborSet {
 //#endregion
 //#region src/tags.d.ts
 /**
- * Tag 0: Standard date/time string (RFC 3339)
- */
-export declare const TAG_DATE_TIME_STRING = 0;
-/**
- * Tag 1: Epoch-based date/time (seconds since 1970-01-01T00:00:00Z)
- */
-export declare const TAG_EPOCH_DATE_TIME = 1;
-/**
- * Tag 100: Epoch-based date (days since 1970-01-01)
- */
-export declare const TAG_EPOCH_DATE = 100;
-/**
  * Tag 2: Positive bignum (unsigned arbitrary-precision integer)
  */
 export declare const TAG_POSITIVE_BIGNUM = 2;
 /**
- * Tag 3: Negative bignum (signed arbitrary-precision integer)
+ * Tag 3: Negative bignum (arbitrary-precision negative integer)
  */
 export declare const TAG_NEGATIVE_BIGNUM = 3;
 /**
@@ -221,81 +206,13 @@ export declare const TAG_NAME_POSITIVE_BIGNUM = "positive-bignum";
  */
 export declare const TAG_NAME_NEGATIVE_BIGNUM = "negative-bignum";
 /**
- * Tag 4: Decimal fraction [exponent, mantissa]
+ * Tag 1: Epoch-based date/time (seconds since 1970-01-01T00:00:00Z)
  */
-export declare const TAG_DECIMAL_FRACTION = 4;
-/**
- * Tag 5: Bigfloat [exponent, mantissa]
- */
-export declare const TAG_BIGFLOAT = 5;
-/**
- * Tag 21: Expected conversion to base64url encoding
- */
-export declare const TAG_BASE64URL = 21;
-/**
- * Tag 22: Expected conversion to base64 encoding
- */
-export declare const TAG_BASE64 = 22;
-/**
- * Tag 23: Expected conversion to base16 encoding
- */
-export declare const TAG_BASE16 = 23;
-/**
- * Tag 24: Encoded CBOR data item
- */
-export declare const TAG_ENCODED_CBOR = 24;
-/**
- * Tag 32: URI (text string)
- */
-export declare const TAG_URI = 32;
-/**
- * Tag 33: base64url-encoded text
- */
-export declare const TAG_BASE64URL_TEXT = 33;
-/**
- * Tag 34: base64-encoded text
- */
-export declare const TAG_BASE64_TEXT = 34;
-/**
- * Tag 35: Regular expression (PCRE/ECMA262)
- */
-export declare const TAG_REGEXP = 35;
-/**
- * Tag 36: MIME message
- */
-export declare const TAG_MIME_MESSAGE = 36;
-/**
- * Tag 37: Binary UUID
- */
-export declare const TAG_UUID = 37;
-/**
- * Tag 256: string reference (namespace)
- */
-export declare const TAG_STRING_REF_NAMESPACE = 256;
-/**
- * Tag 257: binary UUID reference
- */
-export declare const TAG_BINARY_UUID = 257;
-/**
- * Tag 258: Set of values (array with no duplicates)
- */
-export declare const TAG_SET = 258;
-/**
- * Tag 55799: Self-describe CBOR (magic number 0xd9d9f7)
- */
-export declare const TAG_SELF_DESCRIBE_CBOR = 55799;
 export declare const TAG_DATE = 1;
-export declare const TAG_NAME_DATE = "date";
 /**
- * Register the standard tags (date, bignums) and their summarizers into
- * `store`.
- *
- * Idempotent: tags already registered under the same name are skipped;
- * registering a value under a DIFFERENT name still throws via the store's
- * conflict validation.
- *
- * @param store - Target store; defaults to the global tags store.
+ * Name for tag 1 (date).
  */
+export declare const TAG_NAME_DATE = "date";
 /** Options for {@link registerStandardTags}. */
 interface RegisterStandardTagsOptions {
   /**
@@ -307,33 +224,29 @@ interface RegisterStandardTagsOptions {
    */
   readonly bignum?: boolean | undefined;
 }
+/**
+ * Register the standard tags (date, and the bignums with `bignum`) and their
+ * summarizers into `store`.
+ *
+ * Re-registering is idempotent and moves each standard name back to its
+ * standard value, as the reference's `insert_all` does: a store that had
+ * named tag 99 `date` names tag 1 `date` afterwards. Registering tag 1 (or
+ * 2/3 with `bignum`) under a different name throws `CborError` `Custom`
+ * from the store's conflict validation, before any summarizer is set.
+ *
+ * @param store - Target store; defaults to the global tags store.
+ */
 export declare const registerStandardTags: (store?: TagsStore, options?: RegisterStandardTagsOptions) => void;
 /**
- * Converts an array of tag values to their corresponding Tag objects.
- *
- * This function looks up each tag value in the global tag registry and returns
- * an array of complete Tag objects. For any tag values that aren't
- * registered in the global registry, it creates a basic Tag with just the
- * value (no name).
- *
- * @param values - Array of numeric tag values to convert
- * @returns Array of Tag objects corresponding to the input values
+ * Resolve tag values through the global tags store. A value the store does
+ * not know becomes an unnamed `Tag`.
  *
  * @example
  * ```typescript
- * // Register some tags first
  * registerStandardTags();
- *
- * // Convert tag values to Tag objects
- * const tags = tagsForValues([1, 42, 999]);
- *
- * // The first tag (value 1) should be registered as "date"
- * console.log(tags[0].value); // 1
- * console.log(tags[0].name); // "date"
- *
- * // Unregistered tags will have a value but no name
- * console.log(tags[1].value); // 42
- * console.log(tags[2].value); // 999
+ * const tags = tagsForValues([1, 42]);
+ * tags[0].name; // "date"
+ * tags[1].name; // undefined
  * ```
  */
 export declare const tagsForValues: (values: (number | bigint)[]) => Tag[];
@@ -347,7 +260,7 @@ export declare const tagsForValues: (values: (number | bigint)[]) => Tag[];
  *
  * @param value - A non-negative bigint (must be >= 0n)
  * @returns CBOR tagged value
- * @throws CborError with type OutOfRange if value is negative
+ * @throws {CborError} `OutOfRange` if value is negative
  */
 export declare function biguintToCbor(value: bigint): Cbor;
 /**
@@ -372,8 +285,8 @@ export declare function bigintToCbor(value: bigint): Cbor;
  *
  * @param cbor - A CBOR value that should be a byte string
  * @returns Non-negative bigint
- * @throws CborError with type WrongType if not a byte string
- * @throws CborError with type NonCanonicalNumeric if encoding is non-canonical
+ * @throws {CborError} `WrongType` if not a byte string
+ * @throws {CborError} `NonCanonicalNumeric` if encoding is non-canonical
  */
 export declare function biguintFromUntaggedCbor(cbor: Cbor): bigint;
 /**
@@ -388,8 +301,8 @@ export declare function biguintFromUntaggedCbor(cbor: Cbor): bigint;
  *
  * @param cbor - A CBOR value that should be a byte string
  * @returns Negative bigint
- * @throws CborError with type WrongType if not a byte string
- * @throws CborError with type NonCanonicalNumeric if encoding is non-canonical
+ * @throws {CborError} `WrongType` if not a byte string
+ * @throws {CborError} `NonCanonicalNumeric` if encoding is non-canonical
  */
 export declare function bigintFromNegativeUntaggedCbor(cbor: Cbor): bigint;
 /**
@@ -441,8 +354,8 @@ export declare function cborToBigint(cbor: Cbor): bigint;
  */
 export declare function sortArrayByCborEncoding<T extends CborInput>(array: readonly T[]): T[];
 /**
- * Sortable-by-CBOR-encoding interface shape. The `arraySortable` /
- * `setSortable` helpers wrap any iterable into a `CBORSortable` view.
+ * A collection that can be sorted by CBOR encoding. `arraySortable` and
+ * `setSortable` wrap an array or a set in this interface.
  */
 interface CBORSortable<T extends CborInput> {
   sortByCborEncoding(): T[];
@@ -463,6 +376,12 @@ export declare function setSortable<T extends CborInput>(set: ReadonlySet<T>): C
 export declare const hasFractionalPart: (n: number) => boolean;
 //#endregion
 //#region src/varint.d.ts
+/**
+ * Encode a CBOR head (major type + argument) in its shortest form.
+ *
+ * @throws {CborError} `OutOfRange` for a negative, fractional, or
+ *   above-u64 argument.
+ */
 export declare const encodeVarInt: (value: CborNumber, majorType: MajorType) => Uint8Array<ArrayBuffer>;
 export declare const decodeVarIntData: (dataView: DataView, offset: number) => {
   majorType: MajorType;
@@ -617,9 +536,7 @@ export declare const asInteger: (cbor: Cbor) => number | bigint | undefined;
  *
  * Decoded byte strings are zero-copy views aliasing the input buffer -
  * mutating the input after decoding (or mutating the returned bytes) changes
- * the other side. Call `.slice()` first if you need an independent copy. This
- * is deliberate: the zero-copy decode performance profile is part of the
- * library's contract.
+ * the other side. Call `.slice()` first if you need an independent copy.
  *
  * @param cbor - CBOR value
  * @returns Byte string or undefined
@@ -686,7 +603,7 @@ export declare const arrayLength: (cbor: Cbor) => number | undefined;
  * Check if array is empty.
  *
  * @param cbor - CBOR value (must be array)
- * @returns True if empty, false if not empty, undefined if not array
+ * @returns True if empty; false if not empty or not an array (matching hasTag)
  */
 export declare const arrayIsEmpty: (cbor: Cbor) => boolean;
 /**
@@ -702,7 +619,7 @@ export declare function mapValue(cbor: Cbor, key: CborInput): Cbor | undefined;
  *
  * @param cbor - CBOR value (must be map)
  * @param key - Map key
- * @returns True if key exists, false otherwise, undefined if not map
+ * @returns True if key exists; false otherwise or if not a map (matching hasTag)
  */
 export declare function mapHas(cbor: Cbor, key: CborInput): boolean;
 /**
@@ -730,7 +647,7 @@ export declare const mapSize: (cbor: Cbor) => number | undefined;
  * Check if map is empty.
  *
  * @param cbor - CBOR value (must be map)
- * @returns True if empty, false if not empty, undefined if not map
+ * @returns True if empty; false if not empty or not a map (matching hasTag)
  */
 export declare const mapIsEmpty: (cbor: Cbor) => boolean;
 /**
@@ -773,19 +690,44 @@ export declare const asTaggedValue: (cbor: Cbor) => [Tag, Cbor] | undefined;
 //#endregion
 //#region src/conveniences-expect.d.ts
 /**
+ * Options for {@link expectUnsigned}: extract into a fixed-width unsigned
+ * integer the way the reference's `u8`/`u16`/`u32`/`u64: TryFrom<CBOR>`
+ * do (dcbor 0.25.2 `int.rs`).
+ */
+interface ExpectUnsignedOptions {
+  /** Target width in bits; an unsigned value above 2^width − 1 is `OutOfRange`. */
+  readonly width: 8 | 16 | 32 | 64;
+  /**
+   * Also accept a negative integer node and wrap it as the reference does:
+   * a value `v` in [−2^width, −1] yields `2^width + v` (so −1 is 255 at
+   * width 8), and a value below −2^width is `OutOfRange`. Off by default:
+   * without it a negative node is `WrongType`, as for every other type. See
+   * RUST_DIVERGENCES.md §1.1.
+   */
+  readonly wrapNegative?: boolean | undefined;
+}
+/**
  * Extract unsigned integer value, throwing if type doesn't match.
  *
+ * With `options`, the value is checked against a fixed width and, when
+ * `wrapNegative` is set, a negative node is wrapped exactly as the
+ * reference's `u*::try_from` wraps it (see {@link ExpectUnsignedOptions}).
+ *
  * @param cbor - CBOR value
- * @returns Unsigned integer
- * @throws {CborError} With type 'WrongType' if cbor is not an unsigned integer
+ * @param options - Fixed-width extraction (optional; without it the
+ *   behaviour is the plain `Unsigned`-or-`WrongType` check)
+ * @returns Unsigned integer (`bigint` above `Number.MAX_SAFE_INTEGER`)
+ * @throws {CborError} `WrongType` if cbor is not an unsigned integer (or,
+ *   with `wrapNegative`, not an integer); `OutOfRange` when the value does
+ *   not fit `width`
  */
-export declare const expectUnsigned: (cbor: Cbor) => number | bigint;
+export declare const expectUnsigned: (cbor: Cbor, options?: ExpectUnsignedOptions) => number | bigint;
 /**
  * Extract negative integer value, throwing if type doesn't match.
  *
  * @param cbor - CBOR value
  * @returns Negative integer
- * @throws {CborError} With type 'WrongType' if cbor is not a negative integer
+ * @throws {CborError} `WrongType` if cbor is not a negative integer
  */
 export declare const expectNegative: (cbor: Cbor) => number | bigint;
 /**
@@ -793,21 +735,19 @@ export declare const expectNegative: (cbor: Cbor) => number | bigint;
  *
  * @param cbor - CBOR value
  * @returns Integer
- * @throws {CborError} With type 'WrongType' if cbor is not an integer
+ * @throws {CborError} `WrongType` if cbor is not an integer
  */
 export declare const expectInteger: (cbor: Cbor) => number | bigint;
 /**
  * Extract byte string value, throwing if type doesn't match.
  *
+ * Decoded byte strings are zero-copy views aliasing the input buffer -
+ * mutating the input after decoding (or mutating the returned bytes) changes
+ * the other side. Call `.slice()` first if you need an independent copy.
+ *
  * @param cbor - CBOR value
  * @returns Byte string
- * @throws {CborError} With type 'WrongType' if cbor is not a byte string
- *
- * NOTE: decoded byte strings are zero-copy views aliasing the input
- * buffer - mutating the input after decoding (or mutating the returned
- * bytes) changes the other side. Call `.slice()` first if you need an
- * independent copy. This is deliberate: the zero-copy decode performance
- * profile is part of the library's contract.
+ * @throws {CborError} `WrongType` if cbor is not a byte string
  */
 export declare const expectBytes: (cbor: Cbor) => Uint8Array;
 /**
@@ -815,7 +755,7 @@ export declare const expectBytes: (cbor: Cbor) => Uint8Array;
  *
  * @param cbor - CBOR value
  * @returns Text string
- * @throws {CborError} With type 'WrongType' if cbor is not a text string
+ * @throws {CborError} `WrongType` if cbor is not a text string
  */
 export declare const expectText: (cbor: Cbor) => string;
 /**
@@ -823,7 +763,7 @@ export declare const expectText: (cbor: Cbor) => string;
  *
  * @param cbor - CBOR value
  * @returns Array
- * @throws {CborError} With type 'WrongType' if cbor is not an array
+ * @throws {CborError} `WrongType` if cbor is not an array
  */
 export declare const expectArray: (cbor: Cbor) => readonly Cbor[];
 /**
@@ -831,7 +771,7 @@ export declare const expectArray: (cbor: Cbor) => readonly Cbor[];
  *
  * @param cbor - CBOR value
  * @returns Map
- * @throws {CborError} With type 'WrongType' if cbor is not a map
+ * @throws {CborError} `WrongType` if cbor is not a map
  */
 export declare const expectMap: (cbor: Cbor) => CborMap;
 /**
@@ -839,15 +779,18 @@ export declare const expectMap: (cbor: Cbor) => CborMap;
  *
  * @param cbor - CBOR value
  * @returns Boolean
- * @throws {CborError} With type 'WrongType' if cbor is not a boolean
+ * @throws {CborError} `WrongType` if cbor is not a boolean
  */
 export declare const expectBoolean: (cbor: Cbor) => boolean;
 /**
  * Extract float value, throwing if type doesn't match.
  *
+ * Integers coerce to float, as for {@link asFloat}.
+ *
  * @param cbor - CBOR value
  * @returns Float
- * @throws {CborError} With type 'WrongType' if cbor is not a float
+ * @throws {CborError} `WrongType` if cbor is not numeric; `OutOfRange` if an
+ *   integer is not exactly representable as f64
  */
 export declare const expectFloat: (cbor: Cbor) => number;
 /**
@@ -855,20 +798,24 @@ export declare const expectFloat: (cbor: Cbor) => number;
  *
  * @param cbor - CBOR value
  * @returns Number
- * @throws {CborError} With type 'WrongType' if cbor is not a number
+ * @throws {CborError} `WrongType` if cbor is not a number
  */
 export declare const expectNumber: (cbor: Cbor) => CborNumber;
 /**
- * Extract content if has specific tag, throwing if not.
+ * Extract content if has specific tag, throwing if not (the reference's
+ * `try_into_expected_tagged_value`).
  *
- * Throws `{ type: "WrongType" }` if `cbor` is not tagged at all, otherwise
- * `{ type: "WrongTag", expected, actual }` if the tag doesn't match.
+ * The `WrongTag` error names the expected tag as it was given (a `Tag` keeps
+ * its name; a number or bigint stays unnamed) and the actual tag as the node
+ * carries it.
  *
  * @param cbor - CBOR value
- * @param tag - Expected tag value
+ * @param tag - Expected tag value, or a `Tag`
  * @returns Tagged content
+ * @throws {CborError} `WrongType` if `cbor` is not tagged; `WrongTag` (with
+ *   `details.expectedTag` and `details.actualTag`) if the tag doesn't match
  */
-export declare const expectTaggedContent: (cbor: Cbor, tag: number | bigint) => Cbor;
+export declare const expectTaggedContent: (cbor: Cbor, tag: number | bigint | Tag) => Cbor;
 //#endregion
-export { ByteString, type CBORSortable, type Cbor, type CborArrayType, type CborByteStringType, type CborCodec, CborDate, CborError, type CborErrorCode, type CborErrorDetails, type CborErrorDetailsByCode, type CborErrorTyped, type CborInput, CborMap, type CborMapType, type CborMethods, type CborNative, type CborNegativeType, type CborNumber, type CborSimpleType, type CborSummarizer, type CborTagged, type CborTaggedType, type CborTextType, type CborUnsignedType, Err, MajorType, type MapEntry, Ok, type ReadonlyTagsStore, type RegisterStandardTagsOptions, type Result, type Simple, type SummarizerResult, Tag, type TagValue, TagsStore, type TagsStoreOpt, type ToCbor, cbor, cborEquals, decodeWith, encodeCbor, extractCbor, extractTaggedContent, getGlobalTagsStore, isCbor, isCborNaN, isCborNumber, simpleName, taggedValue, validateTag, withTags };
+export { ByteString, type CBORSortable, type Cbor, type CborArrayType, type CborByteStringType, type CborCodec, CborDate, CborError, type CborErrorCode, type CborErrorDetails, type CborErrorDetailsByCode, type CborErrorTyped, type CborInput, CborMap, type CborMapType, type CborMethods, type CborNative, type CborNegativeType, type CborNumber, type CborSimpleType, type CborSummarizer, type CborTagged, type CborTaggedType, type CborTextType, type CborUnsignedType, Err, type ExpectUnsignedOptions, MajorType, type MapEntry, Ok, type ReadonlyTagsStore, type RegisterStandardTagsOptions, type Result, type Simple, type SummarizerResult, Tag, type TagValue, TagsStore, type TagsStoreOpt, type ToCbor, cbor, cborEquals, decodeWith, encodeCbor, extractCbor, extractTaggedContent, getGlobalTagsStore, isCbor, isCborNaN, isCborNumber, simpleName, taggedValue, validateTag, withTags };
 //# sourceMappingURL=index.d.mts.map

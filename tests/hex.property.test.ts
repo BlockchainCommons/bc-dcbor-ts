@@ -1,15 +1,13 @@
 /**
- * Hex front-door property tests (P3.6 gate, run at P4.1).
+ * Hex conversion property tests.
  *
- * Three obligations from the plan:
- *  1. old-vs-new byte equality: for every hex string the PRE-redesign
- *     `hexToBytes` decoded meaningfully (valid even-length hex), the new
- *     validating implementation produces bit-identical bytes - compared
- *     directly against the frozen baseline bundle's export;
+ *  1. Baseline byte equality: for valid even-length hex, the validating
+ *     `hexToBytes` produces the same bytes as the baseline bundle's
+ *     non-validating one;
  *  2. round-trips: bytes → hex → bytes and valid hex → bytes → hex are
  *     lossless (case-normalized);
- *  3. malformed hex (odd length, non-hex characters) now throws CborError
- *     code "Custom" instead of silently fabricating bytes.
+ *  3. malformed hex (odd length, non-hex characters) throws CborError code
+ *     "Custom", where the baseline fabricated bytes.
  */
 
 import fc from "fast-check";
@@ -23,8 +21,8 @@ const validHexArb = fc
   .map((idxs) => idxs.map((i) => hexChars[i]).join(""))
   .filter((s) => s.length % 2 === 0);
 
-describe("hex property tests (old vs new, P3.6)", () => {
-  it("valid hex decodes bit-identically to the pre-redesign implementation", () => {
+describe("hex property tests (baseline vs working tree)", () => {
+  it("valid hex decodes bit-identically to the baseline implementation", () => {
     fc.assert(
       fc.property(validHexArb, (hex) => {
         const oldBytes = baseline.hexToBytes(hex);

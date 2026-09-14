@@ -35,7 +35,7 @@ export {
   type CborMapType,
   type CborTaggedType,
   type CborSimpleType,
-  // The ONE structural conversion protocol accepted by `cbor()`.
+  // The structural conversion protocol accepted by `cbor()`.
   type ToCbor,
 } from "./cbor";
 
@@ -67,31 +67,12 @@ export {
 } from "./tags-store";
 // The standard CBOR tags this library defines.
 export {
-  TAG_DATE_TIME_STRING,
-  TAG_EPOCH_DATE_TIME,
-  TAG_EPOCH_DATE,
+  TAG_DATE,
+  TAG_NAME_DATE,
   TAG_POSITIVE_BIGNUM,
   TAG_NEGATIVE_BIGNUM,
   TAG_NAME_POSITIVE_BIGNUM,
   TAG_NAME_NEGATIVE_BIGNUM,
-  TAG_DECIMAL_FRACTION,
-  TAG_BIGFLOAT,
-  TAG_BASE64URL,
-  TAG_BASE64,
-  TAG_BASE16,
-  TAG_ENCODED_CBOR,
-  TAG_URI,
-  TAG_BASE64URL_TEXT,
-  TAG_BASE64_TEXT,
-  TAG_REGEXP,
-  TAG_MIME_MESSAGE,
-  TAG_UUID,
-  TAG_STRING_REF_NAMESPACE,
-  TAG_BINARY_UUID,
-  TAG_SET,
-  TAG_SELF_DESCRIBE_CBOR,
-  TAG_DATE,
-  TAG_NAME_DATE,
   registerStandardTags,
   type RegisterStandardTagsOptions,
   tagsForValues,
@@ -174,6 +155,7 @@ export {
 // Convenience utilities - expectations (`expect*` = `T` or throw CborError)
 export {
   expectUnsigned,
+  type ExpectUnsignedOptions,
   expectNegative,
   expectInteger,
   expectBytes,

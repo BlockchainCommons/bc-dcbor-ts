@@ -38,7 +38,7 @@ function main() {
       return [undefined, true];
     }
 
-    // If we've seen the abort marker and this is an array at level 1, stop descent
+    // After the abort marker, stop descent into the array at index 2
     const stop =
       foundAbort &&
       element.type === "single" &&

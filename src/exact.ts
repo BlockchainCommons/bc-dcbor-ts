@@ -16,7 +16,6 @@ import { binary16ToNumber, binary32ToNumber, numberToBinary16, numberToBinary32 
 // TypeScript doesn't have native integer types with overflow, so we use number for most operations
 // and bigint for values that exceed Number.MAX_SAFE_INTEGER
 
-// Helper to check if a number has a fractional part
 const hasFract = (n: number): boolean => {
   return n % 1 !== 0;
 };
@@ -54,6 +53,9 @@ export class ExactI16 {
   static readonly MIN = -32768;
   static readonly MAX = 32767;
 
+  // The reference's `exact_from_f16` for i16 excludes -32768 (`source <=
+  // -32768.0`), although binary16 represents it; the f32 and f64 forms
+  // accept it. Kept identical (RUST_DIVERGENCES.md §2).
   static exactFromF16(source: number): number | undefined {
     return intFromFloatNum(source, -32768.0, 32768.0);
   }
@@ -383,8 +385,8 @@ export class ExactU128 {
 }
 
 /**
- * Exact conversions for f16 (half precision float).
- * In TypeScript, we work with f16 as raw bytes (Uint8Array of length 2).
+ * Exact conversions for f16 (half precision float). An f16 is a JS `number`
+ * that is exactly representable in binary16.
  */
 export class ExactF16 {
   static exactFromF16(source: number): number | undefined {

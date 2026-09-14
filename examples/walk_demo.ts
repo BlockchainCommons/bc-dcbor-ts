@@ -62,8 +62,8 @@ function main() {
     keyValuePairs: number;
   }
 
-  // P3: walk() returns void, so accumulate counts in a closure-captured
-  // object instead of threading them through the visitor state.
+  // walk() returns void, so accumulate counts in a closure-captured object
+  // instead of threading them through the visitor state.
   const finalCount: Counter = {
     total: 0,
     maps: 0,
@@ -84,7 +84,6 @@ function main() {
     if (element.type === "keyvalue") {
       finalCount.keyValuePairs += 1;
     } else {
-      // element.type === 'single'
       switch (element.cbor.type) {
         case MajorType.Map:
           finalCount.maps += 1;

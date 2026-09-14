@@ -60,7 +60,7 @@ function main() {
 
   console.log("\n=== Benefits of the new design ===");
   console.log("✅ Tagged values are treated as semantic units");
-  console.log("✅ Tag information is still accessible via cbor.tag()");
+  console.log("✅ Tag information is still accessible via cbor.tag");
   console.log("✅ Less noise in the output");
   console.log("✅ Content is still traversed recursively if it has nested structure");
   console.log("✅ Consistent with map key-value pair handling");

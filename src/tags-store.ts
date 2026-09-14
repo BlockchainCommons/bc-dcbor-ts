@@ -9,7 +9,7 @@
 
 import { type Cbor } from "./cbor";
 import { type CborNumber } from "./cbor-types";
-import type { Tag } from "./tag";
+import { Tag } from "./tag";
 import { CborError } from "./error";
 
 /**
@@ -122,8 +122,14 @@ export class TagsStore implements ReadonlyTagsStore {
    * - Throws if a tag with the same value exists with a different name
    * - Allows re-registering the same tag value with the same name
    *
+   * The store holds frozen tags, as the reference stores clones it owns: a
+   * frozen argument (every `Tag.from` result) is kept by identity, an
+   * unfrozen object literal is copied, so later mutation of the caller's
+   * object never changes a lookup.
+   *
    * @param tag - The tag to register (must have a non-empty name)
-   * @throws Error if tag has no name, empty name, or conflicts with existing registration
+   * @throws {CborError} `Custom` if the tag has no name, an empty name, or
+   *   conflicts with an existing registration
    *
    * @example
    * ```typescript
@@ -149,18 +155,37 @@ export class TagsStore implements ReadonlyTagsStore {
       );
     }
 
-    this._tagsByValue.set(key, tag);
-    this._tagsByName.set(name, tag);
+    const stored = Object.isFrozen(tag) ? tag : Tag.from(tag.value, name);
+    this._tagsByValue.set(key, stored);
+    this._tagsByName.set(name, stored);
   }
 
   /**
    * Register multiple tags; the conflict-throwing validation in `register()`
-   * applies per tag.
+   * applies per tag. Accepts any iterable, including a `readonly` array.
    */
-  registerAll(tags: Tag[]): void {
+  registerAll(tags: Iterable<Tag>): void {
     for (const tag of tags) {
       this.register(tag);
     }
+  }
+
+  /**
+   * An independent copy of this store (the reference's `#[derive(Clone)]`
+   * on `TagsStore`).
+   *
+   * The clone holds the same frozen tags by identity and shares the
+   * summarizer functions, as the reference's `Arc` summarizers are shared.
+   * Registering a tag or setting a summarizer on either store leaves the
+   * other unchanged. The clone is a plain store; it never replaces the
+   * global store.
+   */
+  clone(): TagsStore {
+    const copy = new TagsStore();
+    for (const [key, tag] of this._tagsByValue) copy._tagsByValue.set(key, tag);
+    for (const [name, tag] of this._tagsByName) copy._tagsByName.set(name, tag);
+    for (const [key, summarizer] of this._summarizers) copy._summarizers.set(key, summarizer);
+    return copy;
   }
 
   /**
@@ -171,10 +196,10 @@ export class TagsStore implements ReadonlyTagsStore {
    *
    * @example
    * ```typescript
-   * store.setSummarizer(1, (cbor, flat) => {
-   *   // Custom date formatting
-   *   return `Date(${extractCbor(cbor)})`;
-   * });
+   * store.setSummarizer(1, (cbor, flat) => ({
+   *   ok: true,
+   *   value: `Date(${extractCbor(cbor)})`,
+   * }));
    * ```
    */
   setSummarizer(tagValue: CborNumber, summarizer: CborSummarizer): void {
@@ -211,12 +236,7 @@ export class TagsStore implements ReadonlyTagsStore {
     return this._summarizers.get(key);
   }
 
-  /**
-   * Create a string key for a numeric tag value.
-   * Handles both number and bigint types.
-   *
-   * @private
-   */
+  /** Map key for a tag value, equal for a `number` and the same `bigint`. */
   private _valueKey(value: CborNumber): string {
     return value.toString();
   }
@@ -227,14 +247,24 @@ export class TagsStore implements ReadonlyTagsStore {
 // ============================================================================
 
 /**
- * Global singleton instance of the tags store.
+ * The slot the global store lives in. It is keyed on `globalThis` by a
+ * registered symbol rather than held in a module variable so that every copy
+ * of this module in a process - the ESM and CommonJS builds, or two bundled
+ * copies - resolves the SAME store, the way the reference's `GLOBAL_TAGS`
+ * static is one per process. The `@1` names the store's major version; bump
+ * it on a breaking `TagsStore` change so incompatible copies do not share.
  */
-let globalTagsStore: TagsStore | undefined;
+const GLOBAL_TAGS_KEY = Symbol.for("@blockchaincommons/dcbor/global-tags-store@1");
+
+interface GlobalSlot {
+  [GLOBAL_TAGS_KEY]?: TagsStore;
+}
 
 /**
  * Get the global tags store instance.
  *
- * Creates the instance on first access.
+ * Creates the instance on first access. One store per process for dcbor
+ * 1.x, shared by the ESM and CommonJS builds (see `GLOBAL_TAGS_KEY`).
  *
  * @returns The global TagsStore instance
  *
@@ -244,10 +274,8 @@ let globalTagsStore: TagsStore | undefined;
  * store.register(Tag.from(999, 'myTag'));
  * ```
  */
-export const getGlobalTagsStore = (): TagsStore => {
-  globalTagsStore ??= new TagsStore();
-  return globalTagsStore;
-};
+export const getGlobalTagsStore = (): TagsStore =>
+  ((globalThis as GlobalSlot)[GLOBAL_TAGS_KEY] ??= new TagsStore());
 
 /**
  * Execute a function with access to the global tags store.

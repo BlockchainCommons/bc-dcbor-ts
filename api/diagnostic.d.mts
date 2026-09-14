@@ -1,6 +1,6 @@
-import { t as Cbor } from "./cbor-D4SlBSmQ.mjs";
-import { a as TagsStoreOpt, i as TagsStore } from "./tags-store-D853hYTA.mjs";
-import { i as WalkElement } from "./walk-Te23BaT5.mjs";
+import { t as Cbor } from "./cbor-CZgweoMn.mjs";
+import { a as TagsStoreOpt, i as TagsStore } from "./tags-store-8mi5mOuA.mjs";
+import { i as WalkElement } from "./walk-B0aveFey.mjs";
 //#region src/diag.d.ts
 /**
  * Options for diagnostic formatting.
@@ -8,14 +8,15 @@ import { i as WalkElement } from "./walk-Te23BaT5.mjs";
 interface DiagFormatOpts {
   /**
    * Add tag names as annotations.
-   * When true, tagged values are displayed as "tagName(content)" instead of "tagValue(content)".
+   * When true, a tagged value whose tag has a name in the store is followed by
+   * a `/ name /` comment, e.g. `1(1675854714)   / date /`.
    *
    * @default false
    */
   annotate?: boolean | undefined;
   /**
    * Use custom summarizers for tagged values.
-   * When true, calls registered summarizers for tagged values.
+   * When true, calls registered summarizers for tagged values. Implies `flat`.
    *
    * @default false
    */

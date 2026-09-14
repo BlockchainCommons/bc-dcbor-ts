@@ -4,7 +4,7 @@ import tsParser from "@typescript-eslint/parser";
 import { resolve } from "node:path";
 
 /*
- * Strict, type-checked ESLint flat config for the @blockchaincommons/envelope library.
+ * Strict, type-checked ESLint flat config for the @blockchaincommons/dcbor library.
  */
 const project = resolve(process.cwd(), "./tsconfig.json");
 
@@ -149,7 +149,7 @@ export default [
   // Executable entry points inside a library: these run in Node.js and are
   // expected to use process, console and friends.
   {
-    files: ["src/bin/**/*.ts", "src/cmd/**/*.ts", "src/cli.ts", "src/main.ts"],
+    files: ["src/main.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {

@@ -2,8 +2,7 @@
  * Exact-conversion tests - 1:1 port of Rust's `src/exact.rs` `mod tests`.
  *
  * The `Exact*` helpers underpin dCBOR's numeric reduction (float→int and
- * width-narrowing) and were previously untested on the TypeScript side. Each
- * case asserts the same boundary behavior as the reference: exact integers
+ * width-narrowing). Each case asserts the same boundary behavior as the reference: exact integers
  * convert, fractional/NaN/Infinity/out-of-range inputs reject (undefined), and
  * float round-trips use the same saturating-cast semantics as Rust's `as`.
  *
@@ -41,6 +40,11 @@ describe("Exact conversions (port of Rust exact.rs tests)", () => {
     expect(ExactI16.exactFromF16(NaN)).toBeUndefined();
     expect(ExactI16.exactFromF16(Infinity)).toBeUndefined();
     expect(ExactI16.exactFromF16(-Infinity)).toBeUndefined();
+    // The reference excludes i16::MIN from the f16 form only.
+    expect(ExactI16.exactFromF16(-32768)).toBeUndefined();
+    expect(ExactI16.exactFromF16(32767)).toBe(32767);
+    expect(ExactI16.exactFromF32(-32768)).toBe(-32768);
+    expect(ExactI16.exactFromF64(-32768)).toBe(-32768);
 
     expect(ExactI16.exactFromF32(21.0)).toBe(21);
     expect(ExactI16.exactFromF32(21.5)).toBeUndefined();

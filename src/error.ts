@@ -103,8 +103,8 @@ export interface CborErrorDetailsByCode {
  * }
  * ```
  *
- * The intersection with the legacy {@link CborErrorDetails} bag keeps
- * un-narrowed `details` access compiling exactly as before.
+ * The intersection with the deprecated {@link CborErrorDetails} bag keeps
+ * every detail field readable (as optional) on an un-narrowed error.
  */
 export type CborErrorTyped<C extends CborErrorCode = CborErrorCode> = C extends CborErrorCode
   ? CborError & {

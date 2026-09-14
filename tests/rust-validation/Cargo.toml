@@ -7,12 +7,22 @@ description = "Cross-validates @blockchaincommons/dcbor golden wire vectors agai
 
 [dependencies]
 # The reference implementation @blockchaincommons/dcbor is a port of. Keep the pin in sync
-# with the version the vectors were validated against.
-dcbor = { version = "=0.25.2", features = ["num-bigint"] }
-num-bigint = "0.4.6"
+# with the version the vectors were validated against. The default build is what every
+# Rust consumer in the Blockchain Commons stack uses (no `num-bigint`); the `bignum`
+# feature below enables the reference's optional bignum support for a second run.
+dcbor = { version = "=0.25.2" }
+# chrono is dcbor's date backend; used here only to probe `timestamp_opt`
+# for the inputs `Date::from_timestamp` panics on (see the "date" arm).
+chrono = "0.4"
+num-bigint = { version = "0.4.6", optional = true }
 serde_json = "1"
 sha2 = "0.10"
 hex = "0.4"
+
+[features]
+# `cargo run --release --features bignum -- ../vectors`: the reference with
+# `num-bigint`, which names tags 2/3 and materializes the biguint/bignum recipes.
+bignum = ["dcbor/num-bigint", "dep:num-bigint"]
 
 [profile.release]
 opt-level = 2

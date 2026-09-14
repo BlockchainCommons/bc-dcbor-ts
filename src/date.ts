@@ -1,10 +1,9 @@
 /**
- * Date/time support for CBOR with tag(1) encoding.
+ * Date/time support for CBOR with tag 1 encoding.
  *
- * A CBOR-friendly representation of a date and time.
- *
- * The `CborDate` type provides a wrapper around JavaScript's native `Date` that
- * supports encoding and decoding to/from CBOR with tag 1, following the CBOR
+ * The `CborDate` type holds an instant as whole seconds since the Unix epoch
+ * plus nanoseconds - the same model as the reference's `chrono::DateTime` -
+ * and encodes and decodes it to/from CBOR with tag 1, following the CBOR
  * date/time standard specified in RFC 8949.
  *
  * When encoded to CBOR, dates are represented as tag 1 followed by a numeric
@@ -19,26 +18,17 @@ import { type Cbor } from "./cbor";
 import { MajorType } from "./cbor-types";
 import { cbor, taggedValue } from "./cbor";
 import { Tag } from "./tag";
-import { TAG_EPOCH_DATE_TIME } from "./tags";
+import { TAG_DATE } from "./tags";
+import { getGlobalTagsStore } from "./tags-store";
 import { type CborTagged, type CborCodec, validateTag, extractTaggedContent } from "./codable";
 import { CborError } from "./error";
 
-/**
- * Normalize a timestamp (seconds since the Unix epoch) to whole seconds plus a
- * non-negative, sub-second nanosecond part, so dates round-trip byte-identically.
- *
- * The nanosecond part is truncated toward zero and clamped to [0, u32::MAX]. So
- * a negative fraction floors the value (`-1.5` becomes `-1.0`) and sub-nanosecond
- * precision is dropped (`1.0000000005` becomes `1.0`).
- *
- * @internal
- */
 /**
  * The reference's representable range: chrono's `NaiveDateTime::MIN`
  * (−262143-01-01T00:00:00) and `MAX` (262142-12-31T23:59:59.999999999) as
  * Unix seconds. Beyond it `Date::from_timestamp` panics (`timestamp_opt(…)
  * .unwrap()`); here it is `InvalidDate`. JS `Date` reaches further (±8.64e12
- * s), so every accepted value also renders.
+ * s), so `toDate()` can represent every accepted value.
  */
 const MIN_TIMESTAMP_SECONDS = -8_334_601_228_800;
 const MAX_TIMESTAMP_SECONDS = 8_210_266_876_799;
@@ -96,7 +86,7 @@ function civilFromDays(days: number): [number, number, number] {
  * Whole seconds since the Unix epoch of the given UTC components, or
  * `undefined` when they are not a valid date-time. The checks are chrono's
  * (`NaiveDate::from_ymd_opt`, `NaiveTime::from_hms_opt`): the year within
- * ±262143, a calendar-valid month and day, and `hh:mm:ss` within 23:59:59.
+ * −262143…+262142, a calendar-valid month and day, and `hh:mm:ss` within 23:59:59.
  */
 function civilSeconds(
   year: number,
@@ -138,47 +128,51 @@ const YMD = new RegExp(
   `^${WHITESPACE}*(?:([+-])(\\d+)|(\\d{1,4}))-${WHITESPACE}*(\\d{1,2})-${WHITESPACE}*(\\d{1,2})$`,
 );
 
-function normalizeTimestampSeconds(seconds: number): number {
-  if (!Number.isFinite(seconds)) {
-    // There is no representation for a non-finite instant; reject with a
-    // typed error (the reference saturates NaN to the epoch and panics on ±∞).
-    throw CborError.invalidDate("non-finite timestamp");
-  }
-  if (seconds < MIN_TIMESTAMP_SECONDS || seconds >= MAX_TIMESTAMP_SECONDS + 1) {
+/**
+ * Split a timestamp (seconds since the Unix epoch) into the (whole seconds,
+ * nanoseconds) pair the reference's `Date::from_timestamp` builds:
+ *
+ * - `trunc() as i64` for the seconds - NaN saturates to 0 (the epoch);
+ *   ±Infinity saturates to the `i64` bounds, which chrono rejects and the
+ *   reference then panics on, so here it is `InvalidDate`;
+ * - `(fract() * 1e9) as u32` for the nanoseconds - truncated toward zero and
+ *   saturated to `[0, u32::MAX]`, so a negative fraction is dropped (`-1.5`
+ *   becomes `-1`) and sub-nanosecond precision is lost;
+ * - `timestamp_opt(...)` then requires the whole seconds inside chrono's
+ *   range (the fraction does not take part, so `MIN - 0.5` is `MIN`).
+ *
+ * @internal
+ */
+function timestampParts(seconds: number): [whole: number, nanoseconds: number] {
+  if (Number.isNaN(seconds)) return [0, 0];
+  if (!Number.isFinite(seconds)) throw CborError.invalidDate("non-finite timestamp");
+  const whole = Math.trunc(seconds);
+  if (whole < MIN_TIMESTAMP_SECONDS || whole > MAX_TIMESTAMP_SECONDS) {
     throw CborError.invalidDate("timestamp outside the representable range");
   }
-  const whole = Math.trunc(seconds);
-  let nsecs = Math.trunc((seconds - whole) * 1_000_000_000);
-  if (nsecs < 0) {
-    nsecs = 0;
-  } else if (nsecs > 0xffffffff) {
-    nsecs = 0xffffffff;
+  let nanoseconds = Math.trunc((seconds - whole) * 1_000_000_000);
+  if (nanoseconds < 0) {
+    nanoseconds = 0;
+  } else if (nanoseconds > 0xffffffff) {
+    nanoseconds = 0xffffffff;
   }
-  return whole + nsecs / 1_000_000_000;
+  return [whole, nanoseconds];
 }
 
+let dateCodec: CborCodec<CborDate> | undefined;
+
 /**
- * A CBOR-friendly representation of a date and time.
+ * A UTC date and time, encoded as CBOR tag 1 (RFC 8949 epoch-based
+ * date/time).
  *
- * The `CborDate` type provides a wrapper around JavaScript's native `Date` that
- * supports encoding and decoding to/from CBOR with tag 1, following the CBOR
- * date/time standard specified in RFC 8949.
- *
- * When encoded to CBOR, dates are represented as tag 1 followed by a numeric
- * value representing the number of seconds since (or before) the Unix epoch
- * (1970-01-01T00:00:00Z). The numeric value can be a positive or negative
- * integer, or a floating-point value for dates with fractional seconds.
- *
- * # Features
- *
- * - Supports UTC dates with optional fractional seconds
- * - Provides convenient constructors for common date creation patterns
- * - Implements the `CborTagged` interface and the `ToCbor` protocol
- * - Supports arithmetic operations with durations and between dates
+ * The instant is held as whole seconds since the Unix epoch plus nanoseconds.
+ * On the wire it is tag 1 followed by the seconds since (or before)
+ * 1970-01-01T00:00:00Z: an integer for whole seconds, a float otherwise.
+ * Implements the `CborTagged` interface and the `ToCbor` protocol.
  *
  * @example
  * ```typescript
- * import { CborDate } from './date';
+ * import { CborDate } from "@blockchaincommons/dcbor";
  *
  * // Create a date from a timestamp (seconds since Unix epoch)
  * const date = CborDate.fromEpochSeconds(1675854714.0);
@@ -193,8 +187,6 @@ function normalizeTimestampSeconds(seconds: number): number {
  * const decoded = CborDate.fromTaggedCbor(cborValue);
  * ```
  */
-let dateCodec: CborCodec<CborDate> | undefined;
-
 export class CborDate implements CborTagged {
   /** Debug label: `Object.prototype.toString` reports `[object CborDate]`. */
   // A prototype getter has zero per-instance cost; the readonly field the
@@ -205,30 +197,25 @@ export class CborDate implements CborTagged {
   }
 
   /**
-   * Canonical timestamp in seconds since the Unix epoch as a JS `number`
-   * (`f64`). dCBOR encodes Date (tag 1) as a numeric value in seconds, so
-   * keeping `_seconds` as the source of truth avoids the millisecond-only
-   * round-trip precision loss that going through a JS `Date` instance would
-   * introduce.
-   *
-   * f64 bounds the achievable precision (~16 decimal digits, so roughly
-   * microseconds for current epoch values), but the encode/decode round-trip
-   * is byte-identical.
+   * The instant as the reference's `chrono::DateTime<Utc>` holds it: whole
+   * seconds since the Unix epoch plus a nanosecond part in
+   * `[0, 1_999_999_999]` (values from 10⁹ up represent a leap second, e.g.
+   * `23:59:60`, as chrono does). Keeping the pair rather than one `f64`
+   * means display, equality and ordering see exactly what the reference
+   * sees; the wire value is derived from it as `timestamp()` does.
    */
-  private _seconds: number;
+  private readonly _seconds: number;
+  private readonly _nanoseconds: number;
 
   /**
    * Creates a new `CborDate` from the given JavaScript `Date`.
    *
-   * This method creates a new `CborDate` instance by wrapping a
-   * JavaScript `Date`.
-   *
-   * @param dateTime - A `Date` instance to wrap
+   * @param dateTime - A `Date` instance
    *
    * @returns A new `CborDate` instance
    *
    * @throws `InvalidDate` for an invalid `Date` (`NaN` time) or one outside
-   *   the reference's representable range (±262143 years), which a chrono
+   *   the reference's representable range (years −262143 to 262142), which a chrono
    *   value handed to `Date::from_datetime` can never be.
    *
    * @example
@@ -248,17 +235,13 @@ export class CborDate implements CborTagged {
     if (whole < MIN_TIMESTAMP_SECONDS || whole > MAX_TIMESTAMP_SECONDS) {
       throw CborError.invalidDate("timestamp outside the representable range");
     }
-    const instance = new CborDate();
-    // `timestamp()`: whole seconds plus nanoseconds over 10⁹ (the
-    // millisecond part is exact in nanoseconds).
-    instance._seconds = whole + ((ms - whole * 1000) * 1_000_000) / 1_000_000_000;
-    return instance;
+    // The millisecond part is exact in nanoseconds.
+    return new CborDate(whole, (ms - whole * 1000) * 1_000_000);
   }
 
   /**
-   * Creates a new `CborDate` from year, month, and day components.
-   *
-   * This method creates a new `CborDate` with the time set to 00:00:00 UTC.
+   * Creates a new `CborDate` from year, month, and day components, at
+   * 00:00:00 UTC.
    *
    * @param year - The year component (e.g., 2023)
    * @param month - The month component (1-12)
@@ -300,7 +283,7 @@ export class CborDate implements CborTagged {
    *
    * @throws `InvalidDate` if the components do not form a valid date and time
    *   — the checks the reference's `with_ymd_and_hms(…).unwrap()` panics on:
-   *   a year beyond ±262143, an impossible month or day, or a time past
+   *   a year outside −262143…+262142, an impossible month or day, or a time past
    *   23:59:59 (no leap second here; `fromString` accepts `:60`).
    */
   static fromYmdHms(
@@ -313,23 +296,28 @@ export class CborDate implements CborTagged {
   ): CborDate {
     const seconds = civilSeconds(year, month, day, hour, minute, second);
     if (seconds === undefined) throw CborError.invalidDate("Invalid date components");
-    const instance = new CborDate();
-    instance._seconds = seconds;
-    return instance;
+    return new CborDate(seconds, 0);
   }
 
   /**
-   * Creates a new `CborDate` from seconds since (or before) the Unix epoch.
+   * Creates a new `CborDate` from seconds since the Unix epoch
+   * (1970-01-01T00:00:00Z); negative values are before the epoch.
    *
-   * This method creates a new `CborDate` representing the specified number of
-   * seconds since the Unix epoch (1970-01-01T00:00:00Z). Negative values
-   * represent times before the epoch.
+   * The value is split as the reference's `from_timestamp` splits it: whole
+   * seconds by truncation toward zero, then the fraction in nanoseconds
+   * (truncated, never negative), so `-1.5` is the instant `-1` and
+   * `1.0000000001` is `1`. `NaN` is the epoch, as the reference's saturating
+   * cast makes it.
    *
    * @param secondsSinceUnixEpoch - Seconds from the Unix epoch (positive or
    *   negative), which can include a fractional part for sub-second
    *   precision
    *
    * @returns A new `CborDate` instance
+   *
+   * @throws `InvalidDate` for ±Infinity, or when the whole seconds fall
+   *   outside the reference's representable range (years −262143 to 262142),
+   *   where the reference panics.
    *
    * @example
    * ```typescript
@@ -344,11 +332,8 @@ export class CborDate implements CborTagged {
    * ```
    */
   static fromEpochSeconds(secondsSinceUnixEpoch: number): CborDate {
-    const instance = new CborDate();
-    // Normalize on construction so the stored value (and thus its encoding,
-    // equality, and ordering) is canonical.
-    instance._seconds = normalizeTimestampSeconds(secondsSinceUnixEpoch);
-    return instance;
+    const [seconds, nanoseconds] = timestampParts(secondsSinceUnixEpoch);
+    return new CborDate(seconds, nanoseconds);
   }
 
   /**
@@ -367,9 +352,9 @@ export class CborDate implements CborTagged {
    *   `+12023-02-08`), one- or two-digit month and day, with whitespace
    *   allowed before each number (`2023-2-8`, ` 2023-02-08`).
    *
-   * The fraction is kept exactly: the stored timestamp is the reference's
-   * `timestamp()` — whole seconds plus nanoseconds over 10⁹ — so a decimal
-   * fraction encodes to the same bytes on both sides.
+   * The fraction is kept exactly as nanoseconds, so a decimal fraction
+   * encodes to the same bytes on both sides (`timestamp()`: whole seconds
+   * plus nanoseconds over 10⁹) and a leap second still displays as `:60`.
    *
    * @param value - A string containing a date or date-time in ISO-8601/RFC-3339
    *   format
@@ -414,9 +399,7 @@ export class CborDate implements CborTagged {
       const offset = (sign === "+" ? 1 : -1) * (offsetHours * 3_600 + offsetMinutes * 60);
       const whole = civilSeconds(Number(y), Number(mo), Number(d), Number(h), Number(mi), second);
       if (whole === undefined) throw invalidDate();
-      const instance = new CborDate();
-      instance._seconds = whole - offset + nanoseconds / 1_000_000_000;
-      return instance;
+      return new CborDate(whole - offset, nanoseconds);
     }
 
     const ymd = YMD.exec(value);
@@ -425,9 +408,7 @@ export class CborDate implements CborTagged {
       const year = sign === undefined ? Number(plainYear) : Number(`${sign}${signedYear}`);
       const whole = civilSeconds(year, Number(mo), Number(d), 0, 0, 0);
       if (whole === undefined) throw invalidDate();
-      const instance = new CborDate();
-      instance._seconds = whole;
-      return instance;
+      return new CborDate(whole, 0);
     }
 
     throw invalidDate();
@@ -469,12 +450,10 @@ export class CborDate implements CborTagged {
   }
 
   /**
-   * Returns the underlying JavaScript `Date` object.
+   * Returns a new JavaScript `Date` for this instant (millisecond precision;
+   * sub-millisecond digits are lost).
    *
-   * This method provides access to the wrapped JavaScript `Date`
-   * instance.
-   *
-   * @returns The wrapped `Date` instance
+   * @returns A new `Date` instance
    *
    * @example
    * ```typescript
@@ -484,7 +463,7 @@ export class CborDate implements CborTagged {
    * ```
    */
   toDate(): Date {
-    return new Date(this._seconds * 1000);
+    return new Date(this.epochSeconds * 1000);
   }
 
   /**
@@ -493,6 +472,9 @@ export class CborDate implements CborTagged {
    * represent times before the epoch; the fractional part is sub-second
    * precision.
    *
+   * This is the reference's `timestamp()`: whole seconds plus nanoseconds
+   * over 10⁹, computed in `f64`, and it is the value that goes on the wire.
+   *
    * @example
    * ```typescript
    * const date = CborDate.fromYmd(2023, 2, 8);
@@ -500,7 +482,7 @@ export class CborDate implements CborTagged {
    * ```
    */
   get epochSeconds(): number {
-    return this._seconds;
+    return this._seconds + this._nanoseconds / 1_000_000_000;
   }
 
   /**
@@ -554,16 +536,17 @@ export class CborDate implements CborTagged {
   }
 
   /**
-   * Implementation of the `CborTagged` interface for `CborDate`.
+   * The CBOR tags for `CborDate`: tag 1, the RFC 8949 epoch-based date/time.
    *
-   * This implementation specifies that `CborDate` values are tagged with CBOR tag 1,
-   * which is the standard CBOR tag for date/time values represented as seconds
-   * since the Unix epoch per RFC 8949.
+   * The tag carries whatever name the global tags store has for 1 at the
+   * time of the call (`tags_for_values` in the reference): `date` once
+   * `registerStandardTags()` has run, otherwise none. That name is what a
+   * `WrongTag` error prints as the expected tag.
    *
-   * @returns A vector containing tag 1
+   * @returns An array containing tag 1
    */
   cborTags(): Tag[] {
-    return [Tag.from(TAG_EPOCH_DATE_TIME, "date")];
+    return [getGlobalTagsStore().tagForValue(TAG_DATE) ?? Tag.from(TAG_DATE)];
   }
 
   /**
@@ -599,16 +582,18 @@ export class CborDate implements CborTagged {
   }
 
   /**
-   * Populates this `CborDate` in place from an untagged CBOR value, which
-   * must be a number (integer or floating-point) of seconds since the Unix
-   * epoch. The static `CborDate.fromUntaggedCbor` is the usual entry point;
-   * this instance form exists for reuse.
+   * Creates a `CborDate` from an untagged CBOR value, which must be a number
+   * (integer or floating-point) of seconds since the Unix epoch. The static
+   * `CborDate.fromUntaggedCbor` is the usual entry point; this instance form
+   * exists for the `CborTagged` protocol and returns a new instance.
    *
    * @param cbor - The untagged CBOR value
    *
-   * @returns this (populated in place)
+   * @returns The decoded date
    *
-   * @throws Error if the CBOR value is not a valid timestamp
+   * @throws `WrongType` for a non-numeric value, `OutOfRange` for an integer
+   *   `f64` cannot hold exactly, `InvalidDate` beyond the representable
+   *   range. A float `NaN` is the epoch, as in the reference.
    */
   fromUntaggedCbor(cbor: Cbor): CborDate {
     let timestamp: number;
@@ -644,20 +629,21 @@ export class CborDate implements CborTagged {
         throw CborError.wrongType();
     }
 
-    // Normalize the decoded value so it re-encodes canonically (e.g. a tag-1
-    // float of -1.5 decodes and re-encodes as integer -1).
-    this._seconds = normalizeTimestampSeconds(timestamp);
-    return this;
+    // Split as `from_timestamp` does, so e.g. a tag-1 float of -1.5 decodes
+    // and re-encodes as the integer -1.
+    return CborDate.fromEpochSeconds(timestamp);
   }
 
   /**
-   * Populates this `CborDate` in place from a tag-1 CBOR value.
+   * Creates a `CborDate` from a tag-1 CBOR value (the `CborTagged`
+   * protocol's instance form; returns a new instance).
    *
    * @param cbor - Tagged CBOR value
    *
-   * @returns this (populated in place)
+   * @returns The decoded date
    *
-   * @throws Error if the CBOR value has the wrong tag or cannot be decoded
+   * @throws {CborError} `WrongType` if the value is not tagged, `WrongTag`
+   *   for a tag other than 1, or what `fromUntaggedCbor` throws for the content
    */
   fromTaggedCbor(cbor: Cbor): CborDate {
     const expectedTags = this.cborTags();
@@ -673,8 +659,7 @@ export class CborDate implements CborTagged {
    * @returns New CborDate instance
    */
   static fromTaggedCbor(cbor: Cbor): CborDate {
-    const instance = new CborDate();
-    return instance.fromTaggedCbor(cbor);
+    return CborDate.EPOCH.fromTaggedCbor(cbor);
   }
 
   /**
@@ -688,7 +673,10 @@ export class CborDate implements CborTagged {
    */
   static get codec(): CborCodec<CborDate> {
     dateCodec ??= {
-      tags: [Tag.from(TAG_EPOCH_DATE_TIME, "date")],
+      // Resolved per access, not memoized: the name follows the global store.
+      get tags(): Tag[] {
+        return CborDate.EPOCH.cborTags();
+      },
       decode: (c: Cbor): CborDate => CborDate.fromTaggedCbor(c),
       encode: (value: CborDate): Cbor => value.taggedCbor(),
     };
@@ -696,16 +684,15 @@ export class CborDate implements CborTagged {
   }
 
   static fromUntaggedCbor(cbor: Cbor): CborDate {
-    const instance = new CborDate();
-    return instance.fromUntaggedCbor(cbor);
+    return CborDate.EPOCH.fromUntaggedCbor(cbor);
   }
 
+  /** 1970-01-01T00:00:00Z: the receiver for the protocol's instance decoders. */
+  private static readonly EPOCH = new CborDate(0, 0);
+
   /**
-   * Implementation of the `toString` method for `CborDate`.
-   *
-   * This implementation provides a string representation of a `CborDate` in ISO-8601
-   * format. For dates with time exactly at midnight (00:00:00), only the date
-   * part is shown. For other times, a full date-time string is shown.
+   * The date in ISO-8601 format: only the date part when the time is exactly
+   * midnight (00:00:00), otherwise a date-time to the second with `Z`.
    *
    * @returns String representation in ISO-8601 format
    *
@@ -718,7 +705,7 @@ export class CborDate implements CborTagged {
    *
    * // A date with time will display as date and time
    * const date2 = CborDate.fromYmdHms(2023, 2, 8, 15, 30, 45);
-   * // Returns "2023-02-08T15:30:45.000Z"
+   * // Returns "2023-02-08T15:30:45Z"
    * console.log(date2.toString());
    * ```
    */
@@ -727,8 +714,9 @@ export class CborDate implements CborTagged {
     // (a fraction of a second does not count), otherwise RFC 3339 to the
     // second with `Z`. The year is four digits for 0–9999 and a sign plus at
     // least four digits beyond (`-0004`, `+12023`); JS `toISOString` would
-    // print six digits there.
-    const total = Math.floor(this._seconds);
+    // print six digits there. A leap second (nanoseconds >= 10⁹) prints as
+    // `:60`, as chrono formats it.
+    const total = this._seconds;
     const days = Math.floor(total / 86_400);
     const secondOfDay = total - days * 86_400;
     const [year, month, day] = civilFromDays(days);
@@ -741,29 +729,36 @@ export class CborDate implements CborTagged {
     if (secondOfDay === 0) return date;
     const hour = Math.floor(secondOfDay / 3_600);
     const minute = Math.floor((secondOfDay % 3_600) / 60);
-    const second = secondOfDay % 60;
+    const second = (secondOfDay % 60) + (this._nanoseconds >= 1_000_000_000 ? 1 : 0);
     return `${date}T${pad(hour)}:${pad(minute)}:${pad(second)}Z`;
   }
 
   /**
-   * Compare two dates for equality.
+   * Compare two dates for equality: the same whole seconds and the same
+   * nanoseconds (chrono's `PartialEq`). A leap second `23:59:60` is a
+   * different instant from the following `00:00:00`, although both encode
+   * to the same wire value.
    *
    * @param other - Other CborDate to compare
    * @returns true if dates represent the same moment in time
    */
   equals(other: CborDate): boolean {
-    return this._seconds === other._seconds;
+    return this._seconds === other._seconds && this._nanoseconds === other._nanoseconds;
   }
 
   /**
-   * Compare two dates.
+   * Compare two dates: by whole seconds, then by nanoseconds (chrono's
+   * `Ord`, so a leap second sorts after `:59.999999999` and before the next
+   * `:00`).
    *
    * @param other - Other CborDate to compare
    * @returns -1 if this < other, 0 if equal, 1 if this > other
    */
   compare(other: CborDate): number {
-    if (this._seconds < other._seconds) return -1;
-    if (this._seconds > other._seconds) return 1;
+    if (this._seconds !== other._seconds) return this._seconds < other._seconds ? -1 : 1;
+    if (this._nanoseconds !== other._nanoseconds) {
+      return this._nanoseconds < other._nanoseconds ? -1 : 1;
+    }
     return 0;
   }
 
@@ -776,7 +771,8 @@ export class CborDate implements CborTagged {
     return this.toString();
   }
 
-  private constructor() {
-    this._seconds = Date.now() / 1000;
+  private constructor(seconds: number, nanoseconds: number) {
+    this._seconds = seconds;
+    this._nanoseconds = nanoseconds;
   }
 }

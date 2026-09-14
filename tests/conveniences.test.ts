@@ -1,6 +1,7 @@
 /**
- * Regression tests for the medium-severity parity fixes (M1, M4, M5) from the
- * dCBOR Rust parity audit.
+ * Rust parity of the conveniences: tag comparison across number/bigint,
+ * tagged-content errors, fixed-width unsigned and float extraction, and
+ * summarizer error rendering.
  */
 
 import { describe, test, expect } from "vitest";
@@ -10,25 +11,30 @@ import {
   hasTag,
   getTaggedContent,
   expectTaggedContent,
+  expectUnsigned,
   validateTag,
   asFloat,
   expectFloat,
   TagsStore,
   CborError,
+  Tag,
+  decodeCbor,
+  hexToBytes,
+  registerStandardTags,
+  getGlobalTagsStore,
 } from "../src";
 import { diagnostic } from "../src/diag";
 
-describe("M1: value-normalized tag equality (number/bigint boundary)", () => {
+describe("value-normalized tag equality (number/bigint boundary)", () => {
   test("hasTag matches across the number/bigint divide", () => {
     const tagNum = taggedValue(100, 1); // tag stored as number 100
     const tagBig = taggedValue(100n, 1); // tag stored as bigint 100n
-    // Rust's Tag equality is value-only over u64; in JS `100n === 100` is false,
-    // so the raw === used previously would have rejected these.
+    // Rust's Tag equality is value-only over u64; in JS `100n === 100` is
+    // false, so the comparison normalizes the value first.
     expect(hasTag(tagNum, 100n)).toBe(true);
     expect(hasTag(tagBig, 100)).toBe(true);
     expect(hasTag(tagNum, 100)).toBe(true);
     expect(hasTag(tagBig, 100n)).toBe(true);
-    // Still rejects a genuinely different tag value.
     expect(hasTag(tagNum, 101)).toBe(false);
     expect(hasTag(tagNum, 101n)).toBe(false);
   });
@@ -43,7 +49,7 @@ describe("M1: value-normalized tag equality (number/bigint boundary)", () => {
     expect(expectTaggedContent(tagNum, 100n).type).toBeDefined();
   });
 
-  test("expectTaggedContent still throws WrongTag for a real mismatch", () => {
+  test("expectTaggedContent throws for a real mismatch", () => {
     const t = taggedValue(100, 1);
     expect(() => expectTaggedContent(t, 101)).toThrow(CborError);
   });
@@ -60,7 +66,115 @@ describe("M1: value-normalized tag equality (number/bigint boundary)", () => {
   });
 });
 
-describe("M5: asFloat/expectFloat coerce integers (Rust TryFrom<CBOR> for f64)", () => {
+describe("expectTaggedContent names both tags like try_into_expected_tagged_value", () => {
+  // Executed on dcbor 0.25.2. A numeric expected tag is `Tag::with_value`
+  // (unnamed, whatever the store knows); a `Tag` keeps its name; the actual
+  // tag is the one the node carries (decoded nodes carry none).
+  const message = (f: () => unknown): string => {
+    try {
+      f();
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+    return "(no throw)";
+  };
+  const node = () => taggedValue(Tag.from(99, "x"), 0);
+
+  test("numeric expected tags stay unnamed, before and after registration", () => {
+    expect(message(() => expectTaggedContent(node(), 40000))).toBe(
+      "expected CBOR tag 40000, but got x",
+    );
+    registerStandardTags();
+    getGlobalTagsStore().register(Tag.from(40000, "kv"));
+    expect(message(() => expectTaggedContent(node(), 40000))).toBe(
+      "expected CBOR tag 40000, but got x",
+    );
+    expect(message(() => expectTaggedContent(node(), 40000n))).toBe(
+      "expected CBOR tag 40000, but got x",
+    );
+  });
+
+  test("a Tag argument keeps its name", () => {
+    expect(message(() => expectTaggedContent(node(), Tag.from(40000, "kvexp")))).toBe(
+      "expected CBOR tag kvexp, but got x",
+    );
+    expect(expectTaggedContent(node(), Tag.from(99, "anything")).type).toBe(0);
+  });
+
+  test("a decoded node reports its bare number", () => {
+    expect(message(() => expectTaggedContent(decodeCbor(hexToBytes("d86300")), 40000))).toBe(
+      "expected CBOR tag 40000, but got 99",
+    );
+  });
+});
+
+describe("expectUnsigned with a width wraps negatives like u*::try_from", () => {
+  // Executed on dcbor 0.25.2 (`u8/u32/u64::try_from(CBOR)`): the magnitude on
+  // the wire must fit the width (else OutOfRange); a negative then wraps.
+  const code = (f: () => unknown): string => {
+    try {
+      f();
+    } catch (e) {
+      return CborError.isCborError(e) ? e.code : "foreign";
+    }
+    return "(no throw)";
+  };
+  const wrap = (v: number | bigint, width: 8 | 16 | 32 | 64) =>
+    expectUnsigned(cbor(v), { width, wrapNegative: true });
+
+  test("width 8", () => {
+    expect(wrap(-1, 8)).toBe(255);
+    expect(wrap(-256, 8)).toBe(0);
+    expect(code(() => wrap(-257, 8))).toBe("OutOfRange");
+    expect(code(() => wrap(256, 8))).toBe("OutOfRange");
+    expect(wrap(255, 8)).toBe(255);
+    expect(wrap(0, 8)).toBe(0);
+  });
+
+  test("width 16 and 32", () => {
+    expect(wrap(-1, 16)).toBe(65535);
+    expect(code(() => wrap(65536, 16))).toBe("OutOfRange");
+    expect(wrap(-1, 32)).toBe(4294967295);
+    expect(wrap(-(2 ** 32), 32)).toBe(0);
+    expect(code(() => wrap(-(2 ** 32) - 1, 32))).toBe("OutOfRange");
+    expect(code(() => wrap(2 ** 32, 32))).toBe("OutOfRange");
+  });
+
+  test("width 64 returns bigint above the safe range", () => {
+    expect(wrap(-(2n ** 64n), 64)).toBe(0);
+    expect(wrap(-1, 64)).toBe(18446744073709551615n);
+    expect(wrap(2n ** 64n - 1n, 64)).toBe(18446744073709551615n);
+    expect(wrap(2n ** 53n, 64)).toBe(9007199254740992n);
+    expect(wrap(5, 64)).toBe(5);
+    // −2^64 is the 65-bit negative `3bffffffffffffffff`, decodable but not a JS number.
+    expect(
+      expectUnsigned(decodeCbor(hexToBytes("3bffffffffffffffff")), {
+        width: 64,
+        wrapNegative: true,
+      }),
+    ).toBe(0);
+  });
+
+  test("without wrapNegative a negative is WrongType; non-integers are WrongType", () => {
+    expect(code(() => expectUnsigned(cbor(-1), { width: 8 }))).toBe("WrongType");
+    expect(code(() => expectUnsigned(cbor(1.5), { width: 8, wrapNegative: true }))).toBe(
+      "WrongType",
+    );
+    expect(code(() => expectUnsigned(cbor("1"), { width: 8, wrapNegative: true }))).toBe(
+      "WrongType",
+    );
+    expect(code(() => expectUnsigned(cbor(300), { width: 8 }))).toBe("OutOfRange");
+    expect(expectUnsigned(cbor(300), { width: 16 })).toBe(300);
+  });
+
+  test("without options there is no width bound and a negative is WrongType", () => {
+    expect(expectUnsigned(cbor(300))).toBe(300);
+    expect(expectUnsigned(cbor(2n ** 64n - 1n))).toBe(18446744073709551615n);
+    expect(code(() => expectUnsigned(cbor(-1)))).toBe("WrongType");
+  });
+});
+
+describe("asFloat/expectFloat coerce integers (Rust TryFrom<CBOR> for f64)", () => {
   test("asFloat coerces Unsigned/Negative and passes through floats", () => {
     expect(asFloat(cbor(42))).toBe(42);
     expect(asFloat(cbor(-5))).toBe(-5);
@@ -96,15 +210,13 @@ describe("M5: asFloat/expectFloat coerce integers (Rust TryFrom<CBOR> for f64)",
   });
 });
 
-describe("M4: summarizer error rendered via the full Error Display", () => {
+describe("summarizer error rendered via the full Error Display", () => {
   test("non-Custom/non-WrongTag summarizer errors show the Rust message", () => {
     const store = new TagsStore();
     store.register({ value: 1234, name: "thing" });
-    // Summarizer that always fails with WrongType.
     store.setSummarizer(1234, () => ({ ok: false, error: CborError.wrongType() }));
     const tagged = taggedValue(1234, 1);
     const out = diagnostic(tagged, { summarize: true, tags: store });
-    // Previously this rendered the bare variant id `<error: WrongType>`.
     expect(out).toBe("<error: the decoded CBOR value was not the expected type>");
   });
 

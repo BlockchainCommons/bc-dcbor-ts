@@ -1,14 +1,14 @@
 /**
- * Dist-level packaging assertions (P3.18).
+ * Dist-level packaging assertions.
  *
- * Runs against the BUILT `dist/` output (skipped when absent - CI builds
- * before testing). The critical invariant: the subpath entries share chunks
- * with the root entry, so module-level singletons (the global tags store)
- * are one instance across entries. IIFE output was dropped precisely
- * because it would fork that singleton.
+ * Runs against the built `dist/` output (skipped when absent - CI builds
+ * before testing). The subpath entries share chunks with the root entry, so
+ * module-level state (the global tags store, the `Cbor` prototype) is one
+ * instance across entries.
  */
 
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,7 +16,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const dist = join(here, "..", "dist");
 const built = existsSync(join(dist, "index.mjs")) && existsSync(join(dist, "diagnostic.mjs"));
 
-describe.skipIf(!built)("dist packaging (P3.18)", () => {
+describe.skipIf(!built)("dist packaging", () => {
   it("tags-store singleton is shared across subpath entries", async () => {
     const root = (await import(join(dist, "index.mjs"))) as {
       getGlobalTagsStore(): { register(tag: { value: number; name: string }): void };
@@ -31,6 +31,27 @@ describe.skipIf(!built)("dist packaging (P3.18)", () => {
     // …and observe its name through the DIAGNOSTIC entry's annotator.
     const rendered = diag.diagnostic(root.taggedValue(47474, 1), { annotate: true });
     expect(rendered).toContain("dist-singleton-probe");
+  });
+
+  // The global store is keyed on globalThis, so the CommonJS build
+  // and the ESM build - two module instances - resolve one store, as the
+  // reference's process-wide GLOBAL_TAGS.
+  it("global tags store is one instance across the CJS and ESM builds", async () => {
+    const require = createRequire(import.meta.url);
+    const cjs = require(join(dist, "index.cjs")) as {
+      getGlobalTagsStore(): object;
+      registerStandardTags(): void;
+    };
+    const esm = (await import(join(dist, "index.mjs"))) as {
+      getGlobalTagsStore(): object;
+      taggedValue(tag: number, content: unknown): unknown;
+    };
+    const diag = (await import(join(dist, "diagnostic.mjs"))) as {
+      diagnostic(c: unknown, opts?: { annotate?: boolean }): string;
+    };
+    expect(cjs.getGlobalTagsStore()).toBe(esm.getGlobalTagsStore());
+    cjs.registerStandardTags();
+    expect(diag.diagnostic(esm.taggedValue(1, 0), { annotate: true })).toMatch(/ date /);
   });
 
   it("debug entry installs hooks onto the shared prototype", async () => {

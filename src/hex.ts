@@ -50,8 +50,7 @@ export const hexToBytes = (hexString: string): Uint8Array<ArrayBuffer> => {
     throw CborError.custom("invalid hex string");
   }
   if (nativeFromHex !== undefined) {
-    // Native fromHex only accepts lowercase+uppercase hex, which the
-    // validation above guarantees.
+    // Native fromHex rejects whitespace; it was stripped above.
     return nativeFromHex(hex);
   }
   const bytes = new Uint8Array(hex.length / 2);

@@ -115,7 +115,7 @@ export interface CborCodec<T> {
     readonly tags?: readonly Tag[] | undefined;
 }
 
-// @public (undocumented)
+// @public
 export class CborDate implements CborTagged {
     get [Symbol.toStringTag](): string;
     add(seconds: number): CborDate;
@@ -256,9 +256,13 @@ export class CborMap {
     clear(): void;
     // (undocumented)
     delete(key: CborInput): boolean;
+    // @internal
+    encodedKeyAt(i: number): Uint8Array;
     entries(): Generator<[Cbor, Cbor], void, undefined>;
     // @internal
     get entriesArray(): MapEntry[];
+    // @internal
+    entryAt(i: number): MapEntry;
     forEach(callback: (value: Cbor, key: Cbor, map: CborMap) => void, thisArg?: unknown): void;
     get(key: CborInput): Cbor | undefined;
     getOrThrow(key: CborInput): Cbor;
@@ -370,6 +374,7 @@ export interface CborTaggedType {
     readonly isCbor: true;
     // (undocumented)
     readonly tag: CborNumber;
+    readonly tagName?: string | undefined;
     // (undocumented)
     readonly type: typeof MajorType.Tagged;
     // (undocumented)
@@ -425,7 +430,7 @@ export function decodeWith<T>(data: Uint8Array, codec: CborCodec<T>): T;
 // @public
 export const encodeCbor: (value: CborInput) => Uint8Array<ArrayBuffer>;
 
-// @public (undocumented)
+// @public
 export const encodeVarInt: (value: CborNumber, majorType: MajorType) => Uint8Array<ArrayBuffer>;
 
 // @public
@@ -456,13 +461,19 @@ export const expectNegative: (cbor: Cbor) => number | bigint;
 export const expectNumber: (cbor: Cbor) => CborNumber;
 
 // @public
-export const expectTaggedContent: (cbor: Cbor, tag: number | bigint) => Cbor;
+export const expectTaggedContent: (cbor: Cbor, tag: number | bigint | Tag) => Cbor;
 
 // @public
 export const expectText: (cbor: Cbor) => string;
 
 // @public
-export const expectUnsigned: (cbor: Cbor) => number | bigint;
+export const expectUnsigned: (cbor: Cbor, options?: ExpectUnsignedOptions) => number | bigint;
+
+// @public
+export interface ExpectUnsignedOptions {
+    readonly width: 8 | 16 | 32 | 64;
+    readonly wrapNegative?: boolean | undefined;
+}
 
 // @public
 export const extractCbor: (cbor: Cbor | Uint8Array) => CborNative;
@@ -602,7 +613,7 @@ export interface ReadonlyTagsStore {
     tagForValue(value: CborNumber): Tag | undefined;
 }
 
-// @public (undocumented)
+// @public
 export const registerStandardTags: (store?: TagsStore, options?: RegisterStandardTagsOptions) => void;
 
 // @public
@@ -662,48 +673,9 @@ export const Tag: {
 };
 
 // @public
-export const TAG_BASE16 = 23;
-
-// @public
-export const TAG_BASE64 = 22;
-
-// @public
-export const TAG_BASE64_TEXT = 34;
-
-// @public
-export const TAG_BASE64URL = 21;
-
-// @public
-export const TAG_BASE64URL_TEXT = 33;
-
-// @public
-export const TAG_BIGFLOAT = 5;
-
-// @public
-export const TAG_BINARY_UUID = 257;
-
-// @public (undocumented)
 export const TAG_DATE = 1;
 
 // @public
-export const TAG_DATE_TIME_STRING = 0;
-
-// @public
-export const TAG_DECIMAL_FRACTION = 4;
-
-// @public
-export const TAG_ENCODED_CBOR = 24;
-
-// @public
-export const TAG_EPOCH_DATE = 100;
-
-// @public
-export const TAG_EPOCH_DATE_TIME = 1;
-
-// @public
-export const TAG_MIME_MESSAGE = 36;
-
-// @public (undocumented)
 export const TAG_NAME_DATE = "date";
 
 // @public
@@ -717,24 +689,6 @@ export const TAG_NEGATIVE_BIGNUM = 3;
 
 // @public
 export const TAG_POSITIVE_BIGNUM = 2;
-
-// @public
-export const TAG_REGEXP = 35;
-
-// @public
-export const TAG_SELF_DESCRIBE_CBOR = 55799;
-
-// @public
-export const TAG_SET = 258;
-
-// @public
-export const TAG_STRING_REF_NAMESPACE = 256;
-
-// @public
-export const TAG_URI = 32;
-
-// @public
-export const TAG_UUID = 37;
 
 // @public
 export const tagContent: (cbor: Cbor) => Cbor | undefined;
@@ -751,12 +705,13 @@ export class TagsStore implements ReadonlyTagsStore {
     constructor();
     // (undocumented)
     assignedNameForTag(tag: Tag): string | undefined;
+    clone(): TagsStore;
     // (undocumented)
     nameForTag(tag: Tag): string;
     // (undocumented)
     nameForValue(value: CborNumber): string;
     register(tag: Tag): void;
-    registerAll(tags: Tag[]): void;
+    registerAll(tags: Iterable<Tag>): void;
     setSummarizer(tagValue: CborNumber, summarizer: CborSummarizer): void;
     // (undocumented)
     summarizer(tag: CborNumber): CborSummarizer | undefined;

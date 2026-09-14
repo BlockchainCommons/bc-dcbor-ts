@@ -111,6 +111,7 @@ dependencies = [
 name = "dcbor-vector-validation"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "dcbor",
  "hex",
  "num-bigint",

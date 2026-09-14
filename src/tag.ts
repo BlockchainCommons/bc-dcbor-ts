@@ -58,6 +58,9 @@ export const Tag = {
   /**
    * Create a Tag from its numeric value, optionally with a name.
    *
+   * The returned object is frozen: a `Tag` is a value, as in the reference,
+   * and a store keeps the tags it is given by identity when they are frozen.
+   *
    * ```typescript
    * Tag.from(1, "date");
    * Tag.from(12345);
@@ -65,9 +68,9 @@ export const Tag = {
    */
   from(value: TagValue, name?: string): Tag {
     if (name !== undefined) {
-      return { value, name };
+      return Object.freeze({ value, name });
     }
-    return { value };
+    return Object.freeze({ value });
   },
 
   /**

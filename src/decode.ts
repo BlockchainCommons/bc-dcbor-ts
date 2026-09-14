@@ -1,10 +1,28 @@
 import { type Cbor, encodeCbor, attachMethods } from "./cbor";
 import { type CborNumber, MajorType } from "./cbor-types";
 import { areBytesEqual } from "./stdlib";
-import { binary16ToNumber, binary32ToNumber, binary64ToNumber } from "./float";
+import {
+  binary16ToNumber,
+  binary32ToNumber,
+  binary64ToNumber,
+  cborNodeFromF16,
+  cborNodeFromF32,
+  cborNodeFromF64,
+  validateCanonicalF16,
+  validateCanonicalF32,
+  validateCanonicalF64,
+} from "./float";
 import { CborMap } from "./map";
 import { CborError, Ok, Err, type Result } from "./error";
 import { narrowInteger } from "./numeric";
+import { utf8ErrorDescription } from "./utf8";
+
+// One reused strict UTF-8 decoder. `fatal` rejects malformed sequences instead
+// of substituting U+FFFD; `ignoreBOM` keeps a leading U+FEFF as a character -
+// the WHATWG default strips it, whereas Rust's `String::from_utf8` (the
+// reference decoder) preserves every code point, so a text string starting
+// with a BOM must survive a decode -> re-encode round trip byte-for-byte.
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 /**
  * A forward-only cursor over the input bytes.
@@ -65,8 +83,7 @@ class ByteReader {
  * @remarks Decoded byte strings are zero-copy views aliasing the input
  * buffer - mutating the input after decoding (or mutating the returned
  * bytes) changes the other side. Call `.slice()` first if you need an
- * independent copy. This is deliberate: the zero-copy decode performance
- * profile is part of the library's contract.
+ * independent copy.
  */
 export function decodeCbor(data: Uint8Array): Cbor {
   const reader = new ByteReader(data);
@@ -81,7 +98,8 @@ export function decodeCbor(data: Uint8Array): Cbor {
 /**
  * Decode without throwing: returns a {@link Result} carrying the decoded value,
  * or the {@link CborError} that {@link decodeCbor} would have thrown. Non-CBOR
- * errors still propagate.
+ * errors still propagate - including the host's `RangeError` when a deeply
+ * nested input exhausts the call stack (the reference aborts there too).
  *
  * The `try` prefix means "returns `Result`, never throws" - everywhere in
  * this library.
@@ -230,14 +248,16 @@ function readCbor(reader: ByteReader): Cbor {
       }
       const textBytes = reader.bytesAt(reader.pos, value);
       reader.advance(value);
-      // dCBOR text strings must be valid UTF-8 (RFC 8949). Use a fatal decoder
-      // so invalid bytes throw rather than getting replaced with U+FFFD and
-      // silently accepted.
+      // dCBOR text strings must be valid UTF-8 (RFC 8949). The decoder is
+      // fatal so invalid bytes throw rather than getting replaced with U+FFFD
+      // and silently accepted. The host's error text is discarded: the
+      // message is the reference's `Utf8Error` description, computed from
+      // the bytes.
       let text: string;
       try {
-        text = new TextDecoder("utf-8", { fatal: true }).decode(textBytes);
-      } catch (e) {
-        throw CborError.invalidUtf8(e instanceof Error ? e.message : String(e));
+        text = utf8Decoder.decode(textBytes);
+      } catch {
+        throw CborError.invalidUtf8(utf8ErrorDescription(textBytes));
       }
       // dCBOR requires all text strings to be in Unicode Normalization Form C
       // (NFC); reject any that are not already normalized.
@@ -272,38 +292,28 @@ function readCbor(reader: ByteReader): Cbor {
       } as const);
     }
     case MajorType.Simple:
+      // Float heads: the reference's `validate_canonical_f*` predicates decide
+      // acceptance and its `From<f*>` impls build the node - not a re-encode
+      // comparison. The two differ for whole-valued heads at or beyond the
+      // saturating-cast bounds (2^31 for f32, 2^63 for f64): those are
+      // accepted and reduce to integer nodes, so e.g. `fa4f000001` decodes to
+      // the unsigned 2147483904 and re-encodes as `1a80000100`.
       switch (varIntLen) {
         case 3: {
+          // `value` is the raw 16-bit pattern; the canonical NaN is 0x7e00.
           const f = binary16ToNumber(reader.bytesAt(headStart + 1, 2));
-          // dCBOR canonical-encoding check via re-encode-and-compare. JS's
-          // `Number` type does not preserve NaN payload bits - every NaN
-          // collapses to the same value - so a bit-level check is not possible.
-          // Re-encoding round-trips through the canonicalising encoder, catching
-          // every non-canonical NaN, ±Infinity, and integer-reducible float.
-          checkCanonicalEncoding(f, reader.bytesAt(headStart, varIntLen));
-          return attachMethods({
-            isCbor: true,
-            type: MajorType.Simple,
-            value: { type: "Float", value: f },
-          } as const);
+          validateCanonicalF16(Number(value), f);
+          return attachMethods(cborNodeFromF16(f));
         }
         case 5: {
           const f = binary32ToNumber(reader.bytesAt(headStart + 1, 4));
-          checkCanonicalEncoding(f, reader.bytesAt(headStart, varIntLen));
-          return attachMethods({
-            isCbor: true,
-            type: MajorType.Simple,
-            value: { type: "Float", value: f },
-          } as const);
+          validateCanonicalF32(f);
+          return attachMethods(cborNodeFromF32(f));
         }
         case 9: {
           const f = binary64ToNumber(reader.bytesAt(headStart + 1, 8));
-          checkCanonicalEncoding(f, reader.bytesAt(headStart, varIntLen));
-          return attachMethods({
-            isCbor: true,
-            type: MajorType.Simple,
-            value: { type: "Float", value: f },
-          } as const);
+          validateCanonicalF64(f);
+          return attachMethods(cborNodeFromF64(f));
         }
         default:
           switch (value) {
@@ -333,8 +343,7 @@ function readCbor(reader: ByteReader): Cbor {
   }
 }
 
-function checkCanonicalEncoding(cbor: Cbor | CborNumber, buf: Uint8Array): void {
-  // encodeCbor accepts both decoded CBOR objects and native values (floats).
+function checkCanonicalEncoding(cbor: Cbor, buf: Uint8Array): void {
   const buf2 = encodeCbor(cbor);
   if (!areBytesEqual(buf, buf2)) {
     throw CborError.nonCanonicalNumeric();

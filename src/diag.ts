@@ -1,7 +1,7 @@
 /**
- * Enhanced diagnostic formatting for CBOR values.
+ * Diagnostic notation formatting for CBOR values.
  *
- * Provides multiple formatting options including
+ * Formatting options:
  * - Annotated diagnostics with tag names
  * - Summarized values using custom summarizers
  * - Flat (single-line) vs. pretty (multi-line) formatting
@@ -26,7 +26,8 @@ import { flanked } from "./string-util";
 export interface DiagFormatOpts {
   /**
    * Add tag names as annotations.
-   * When true, tagged values are displayed as "tagName(content)" instead of "tagValue(content)".
+   * When true, a tagged value whose tag has a name in the store is followed by
+   * a `/ name /` comment, e.g. `1(1675854714)   / date /`.
    *
    * @default false
    */
@@ -34,7 +35,7 @@ export interface DiagFormatOpts {
 
   /**
    * Use custom summarizers for tagged values.
-   * When true, calls registered summarizers for tagged values.
+   * When true, calls registered summarizers for tagged values. Implies `flat`.
    *
    * @default false
    */
@@ -102,7 +103,6 @@ const resolveOpts = (opts?: DiagFormatOpts): DiagState => {
  */
 export function diagnostic(input: Cbor | WalkElement, opts?: DiagFormatOpts): string {
   const state = resolveOpts(opts);
-  // WalkElement support is load-bearing for walk visitors.
   if (
     typeof input === "object" &&
     "type" in input &&
@@ -186,8 +186,8 @@ const greatestStringsLen = (i: DiagItem): number =>
 
 /**
  * Alternates between `pairSeparator` (after even-indexed items - keys) and
- * `itemSeparator` (after odd-indexed items - values). Falls back to
- * `itemSeparator` for non-pair groups.
+ * `itemSeparator` (after odd-indexed items - values). Uses `itemSeparator`
+ * throughout when `pairSeparator` is omitted.
  */
 function joined(elements: string[], itemSeparator: string, pairSeparator?: string): string {
   const sep = pairSeparator ?? itemSeparator;
@@ -328,8 +328,8 @@ function item_tagged(tag: number | bigint, content: Cbor, opts: DiagFormatOpts):
       if (result.ok) {
         return item(result.value);
       }
-      // Use the shared error formatter so every variant gets its full message,
-      // including name-aware tag rendering for WrongTag.
+      // The error's message is its full text, including the tag names of a
+      // WrongTag.
       return item(`<error: ${result.error.message}>`);
     }
   }
@@ -347,7 +347,6 @@ function item_tagged(tag: number | bigint, content: Cbor, opts: DiagFormatOpts):
   return group(`${String(tag)}(`, ")", [diagItem(content, opts)], false, comment);
 }
 
-// Primitive formatters reused by both single- and multi-line paths.
 function formatUnsigned(value: number | bigint): string {
   return String(value);
 }
@@ -382,8 +381,8 @@ function formatSimple(value: Simple): string {
 }
 
 /**
- * Format a CBOR float for diagnostic output. Shared with the hex-dump
- * annotation path; see {@link floatDisplayString}.
+ * Format a CBOR float for diagnostic output, with the same rendering
+ * `hexAnnotated` uses; see {@link floatDisplayString}.
  */
 function formatFloat(value: number): string {
   return floatDisplayString(value);

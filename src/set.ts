@@ -52,9 +52,8 @@ export class CborSet {
    * Create a CborSet from any iterable of encodable items. Duplicates (by
    * canonical encoding) are removed.
    *
-   * NOTE: strings are iterable - `CborSet.from("abc")` is a THREE-element
-   * set of one-character strings, not a single-element set. Wrap in an
-   * array (`CborSet.from(["abc"])`) for the latter.
+   * Strings are iterable: `CborSet.from("abc")` is a three-element set of
+   * one-character strings. Use `CborSet.from(["abc"])` for a single element.
    */
   static from(items: Iterable<CborInput>): CborSet {
     const set = new CborSet();
@@ -194,10 +193,8 @@ export class CborSet {
   }
 
   /**
-   * Iterate the stored `Cbor` elements lazily in canonical order.
-   *
-   * NOTE: this yields the stored `Cbor` nodes. Use `toArray()` for an eager
-   * array of extracted native values.
+   * Iterate the stored `Cbor` elements lazily in canonical order. Use
+   * `toArray()` for an eager array of extracted native values.
    */
   *values(): Generator<Cbor, void, undefined> {
     yield* this;

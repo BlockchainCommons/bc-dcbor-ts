@@ -87,6 +87,20 @@ export class SortedByteMap<V> {
     return n > 0 ? this.items[n - 1].key : undefined;
   }
 
+  /**
+   * The key at position `i` in ascending key order. Positional access lets
+   * two maps be walked in lockstep, and a single map be encoded, without
+   * materializing an entries array; the caller keeps `i` within `[0, size)`.
+   */
+  keyAt(i: number): Uint8Array {
+    return this.items[i].key;
+  }
+
+  /** The value at position `i` in ascending key order (see {@link keyAt}). */
+  valueAt(i: number): V {
+    return this.items[i].value;
+  }
+
   /** Map over each value (with its key) in ascending key order. */
   map<T>(fn: (value: V, key: Uint8Array) => T): T[] {
     return this.items.map((e) => fn(e.value, e.key));

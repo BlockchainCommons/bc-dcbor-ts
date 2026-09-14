@@ -6,7 +6,7 @@
 
 import { MajorType } from "./cbor-types";
 import { encodeVarInt } from "./varint";
-import { f64CborData } from "./float";
+import { f64CborData, floatDisplayString } from "./float";
 
 /**
  * Represents CBOR simple values (major type 7).
@@ -34,7 +34,9 @@ export type Simple =
  * Returns the standard name of the simple value as a string.
  *
  * For `False`, `True`, and `Null`, this returns their lowercase string
- * representation. For `Float` values, it returns their numeric representation.
+ * representation. For `Float` values, it returns Rust's `{:?}` rendering:
+ * `NaN`, `inf`, `-inf`, or the shortest round-trip decimal with at least one
+ * fractional digit (`42.0`, `1.5`, `1e21`).
  */
 export const simpleName = (simple: Simple): string => {
   switch (simple.type) {
@@ -49,9 +51,9 @@ export const simpleName = (simple: Simple): string => {
       if (Number.isNaN(v)) {
         return "NaN";
       } else if (!Number.isFinite(v)) {
-        return v > 0 ? "Infinity" : "-Infinity";
+        return v > 0 ? "inf" : "-inf";
       } else {
-        return String(v);
+        return floatDisplayString(v);
       }
     }
   }
@@ -77,8 +79,8 @@ export const isCborNaN = (simple: Simple): boolean =>
  * - `False` encodes as `0xf4`
  * - `True` encodes as `0xf5`
  * - `Null` encodes as `0xf6`
- * - `Float` values encode according to the IEEE 754 floating point rules,
- *   using the shortest representation that preserves precision.
+ * - `Float` values reduce to an integer when whole, otherwise encode in the
+ *   shortest IEEE 754 width that preserves the value.
  */
 export const simpleCborData = (simple: Simple): Uint8Array<ArrayBuffer> => {
   switch (simple.type) {
@@ -122,11 +124,9 @@ export const simpleEquals = (a: Simple, b: Simple): boolean => {
 /**
  * Hash a Simple value.
  *
- * This is a fast non-cryptographic hash (FNV-1a) used solely to drive
- * in-process hash tables and dedup. It is not part of the deterministic
- * CBOR wire format, which compares the encoded bytes, and it is not stable
- * across processes or implementations. Do not persist these hash values or
- * compare them externally.
+ * A non-cryptographic FNV-1a hash over the variant and float bits. It is
+ * not part of the wire format or of CBOR equality, and it is not stable
+ * across implementations; do not persist it.
  */
 export const simpleHash = (simple: Simple): number => {
   // FNV-1a hash.

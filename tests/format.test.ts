@@ -1,21 +1,24 @@
 /**
- * Format tests - 1:1 translation from Rust's tests/format.rs
+ * Format tests, ported from Rust's tests/format.rs: diagnostic notation
+ * (pretty, annotated, flat), summary, and hex (plain and annotated).
  *
- * Tests various formatting outputs including:
- * - Diagnostic notation (pretty, annotated, and flat)
- * - Summary format
- * - Hex encoding (plain and annotated)
- *
- * P3.8: the Display (`description`) and debug-string (`debug_description`)
- * surfaces were removed with no replacement; those assertions are gone.
- * Where the old expected description equalled the flat diagnostic, that
- * exact string is still asserted via the flat-diagnostic parameter.
+ * Rust's `description` and `debug_description` outputs have no TypeScript
+ * counterpart and are not asserted.
  */
 
 import type { CborInput } from "../src";
-import { cbor, CborMap, registerStandardTags, CborDate, decodeCbor, taggedValue } from "../src";
+import {
+  cbor,
+  CborMap,
+  registerStandardTags,
+  CborDate,
+  decodeCbor,
+  taggedValue,
+  simpleName,
+} from "../src";
 import { diagnostic } from "../src/diag";
 import { hexAnnotated } from "../src/dump";
+import { floatDisplayString } from "../src/float";
 
 /** Helper to convert a hex string to a Uint8Array. */
 function hexToBytes(hexStr: string): Uint8Array {
@@ -27,7 +30,7 @@ function hexToBytes(hexStr: string): Uint8Array {
 }
 
 // Compare one formatted output against its expectation; an empty expectation
-// just logs the actual output (matches the original helper's behavior).
+// just logs the actual output.
 function check(testName: string, label: string, actual: string, expected: string) {
   if (expected === "") {
     console.log(`${label}:`);
@@ -42,8 +45,7 @@ function check(testName: string, label: string, actual: string, expected: string
   expect(actual).toBe(expected);
 }
 
-// Main test runner function - matches Rust's run() function
-// P3.8: description (Display) and debug-string parameters removed.
+// Counterpart of Rust's `run()`, without the description and debug outputs.
 function run(
   testName: string,
   value: CborInput,
@@ -236,7 +238,6 @@ describe("format tests", () => {
   });
 
   test("format_tagged", () => {
-    // Create tagged CBOR: tag 100 with value "Hello"
     const tagged = taggedValue(100, "Hello");
     run(
       "format_tagged",
@@ -306,8 +307,6 @@ describe("format tests", () => {
       "d83183015829536f6d65206d7973746572696573206172656e2774206d65616e7420746f20626520736f6c7665642e82d902c3820158402b9238e19eafbc154b49ec89edd4e0fb1368e97332c6913b4beb637d1875824f3e43bd7fb0c41fb574f08ce00247413d3ce2d9466e0ccfa4a89b92504982710ad902c3820158400f9c7af36804ffe5313c00115e5a31aa56814abaa77ff301da53d48613496e9c51a98b36d55f6fb5634fdb0123910cfa4904f1c60523df41013dc3749b377900";
     const cborValue = decodeCbor(hexToBytes(encodedCborHex));
 
-    // P3.8: description (Display) and debug-string surfaces removed; the old
-    // expected description equalled the flat diagnostic asserted below.
     const diagnosticStr = `49(
     [
         1,
@@ -412,19 +411,15 @@ describe("format tests", () => {
         78 7b                           # text(123)
             4c6f72656d20697073756d20646f6c6f722073697420616d65742c20636f6e73656374657475722061646970697363696e6720656c69742c2073656420646f20656975736d6f642074656d706f7220696e6369646964756e74207574206c61626f726520657420646f6c6f7265206d61676e6120616c697175612e # "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."`;
 
-    // Assert the LIBRARY outputs directly. The value is decoded (its tags carry
-    // no name), so - exactly like Rust - the plain diagnostic path renders tag
-    // numbers (`1(...)`), while only the annotated path resolves `/ date /` and
-    // the summary renders `2021-02-24`.
+    // The decoded tags carry no name, so, as in Rust, the plain diagnostic
+    // prints tag numbers (`1(...)`), the annotated form resolves `/ date /` and
+    // the summary prints `2021-02-24`.
     expect(diagnostic(cborValue)).toBe(diagnosticStr);
     expect(diagnostic(cborValue, { annotate: true })).toBe(diagnosticAnnotated);
     expect(diagnostic(cborValue, { flat: true })).toBe(diagnosticFlat);
     expect(diagnostic(cborValue, { summarize: true })).toBe(summaryStr);
     expect(cborValue.toHex()).toBe(hex);
     expect(hexAnnotated(cborValue)).toBe(hexAnnotatedStr);
-    // P3.8: debug-string surface removed (old expected:
-    // 'tagged(300, map({...}))'); Display description equalled the flat
-    // diagnostic asserted above.
   });
 
   test("format_key_order", () => {
@@ -438,8 +433,6 @@ describe("format tests", () => {
     m.set("aa", 5);
     m.set([100], 6);
 
-    // P3.8: description (Display) and debug-string surfaces removed; the old
-    // expected description equalled the flat diagnostic asserted below.
     const diagnosticStr = `{
     10:
     1,
@@ -495,7 +488,99 @@ describe("format tests", () => {
   });
 });
 
-describe("diagnostic line breaking measures strings in UTF-8 bytes (review N1)", () => {
+describe("float diagnostic matches Rust {:?} on exact decimal ties", () => {
+  // JS `String()` rounds an exact decimal tie to the even digit; Rust's
+  // flt2dec rounds the magnitude up. Every expected string below was
+  // executed on the reference (`format!("{:?}", f64)`).
+  const dec = (hex: string) => decodeCbor(hexToBytes(hex));
+
+  it("rounds ties up in exponential notation", () => {
+    expect(diagnostic(dec("f9000a"))).toBe("5.960464477539063e-7"); // 10 * 2^-24
+    expect(diagnostic(dec("f90032"))).toBe("2.9802322387695313e-6"); // 50 * 2^-24
+    expect(diagnostic(dec("fa33000000"))).toBe("2.9802322387695313e-8"); // 2^-25
+    expect(diagnostic(cbor(-(10 * 2 ** -24)))).toBe("-5.960464477539063e-7");
+  });
+
+  it("rounds ties up in decimal notation", () => {
+    expect(diagnostic(dec("fb4090000010000000"))).toBe("1024.0000610351563"); // 1024 + 2^-14
+    expect(diagnostic(dec("fb4210000000000800"))).toBe("17179869184.007813"); // 2^34 + 2^-7
+    expect(diagnostic(cbor(-(1024 + 2 ** -14)))).toBe("-1024.0000610351563");
+    expect(hexAnnotated(dec("fb4090000010000000"))).toBe(
+      "fb4090000010000000  # 1024.0000610351563",
+    );
+  });
+
+  it("leaves non-tie values and the notation thresholds unchanged", () => {
+    expect(diagnostic(cbor(0.5 + 2 ** -53))).toBe("0.5000000000000001");
+    expect(diagnostic(cbor(1 + 3 * 2 ** -52))).toBe("1.0000000000000007");
+    expect(diagnostic(cbor(123456789.125))).toBe("123456789.125");
+    expect(diagnostic(cbor(4.35))).toBe("4.35");
+    expect(diagnostic(cbor(5e-324))).toBe("5e-324");
+    expect(diagnostic(cbor(0.0001))).toBe("0.0001");
+    expect(diagnostic(cbor(0.00001))).toBe("1e-5");
+    expect(diagnostic(cbor(1e21))).toBe("1e21");
+    expect(diagnostic(cbor(1.5e20))).toBe("1.5e20");
+    expect(diagnostic(cbor(-0.0))).toBe("0"); // -0.0 integer-reduces
+    expect(diagnostic(cbor(1.7976931348623157e308))).toBe("1.7976931348623157e308");
+    // Whole values integer-reduce through cbor(); the float renderer itself
+    // follows Rust's `{:?}` thresholds: decimal below 1e16, exponential from it.
+    expect(floatDisplayString(1.5e15)).toBe("1500000000000000.0");
+    expect(floatDisplayString(2 ** 53)).toBe("9007199254740992.0");
+    expect(floatDisplayString(1e16)).toBe("1e16");
+    expect(floatDisplayString(-1e16)).toBe("-1e16");
+  });
+
+  it("simpleName renders floats like Rust's Simple Debug", () => {
+    expect(simpleName({ type: "Float", value: Infinity })).toBe("inf");
+    expect(simpleName({ type: "Float", value: -Infinity })).toBe("-inf");
+    expect(simpleName({ type: "Float", value: NaN })).toBe("NaN");
+    expect(simpleName({ type: "Float", value: 1.5 })).toBe("1.5");
+    expect(simpleName({ type: "Float", value: 42 })).toBe("42.0");
+    expect(simpleName({ type: "Float", value: 10 * 2 ** -24 })).toBe("5.960464477539063e-7");
+    expect(simpleName({ type: "True" })).toBe("true");
+  });
+});
+
+describe("byte-string notes treat every non-ASCII code point as printable", () => {
+  // Rust's `is_printable(c: char)` sees whole code points, so astral
+  // characters are printable too. Executed on dcbor 0.25.2.
+  it("keeps astral characters in the note", () => {
+    expect(hexAnnotated(cbor(hexToBytes("f09f9880")))).toBe(
+      `44              # bytes(4)\n    f09f9880    # "😀"`,
+    );
+    expect(hexAnnotated(cbor(hexToBytes("00f09f9880")))).toBe(
+      `45              # bytes(5)\n    00f09f9880  # ".😀"`,
+    );
+    expect(hexAnnotated(cbor(hexToBytes("f0908080e29c93")))).toBe(
+      `47                  # bytes(7)\n    f0908080e29c93  # "𐀀✓"`,
+    );
+  });
+  it("still dots ASCII controls and omits the note when nothing is printable", () => {
+    expect(hexAnnotated(cbor(hexToBytes("0a41")))).toBe(
+      `42          # bytes(2)\n    0a41    # ".A"`,
+    );
+    expect(hexAnnotated(cbor(hexToBytes("00")))).toBe(`41      # bytes(1)\n    00`);
+  });
+});
+
+describe("text decoding keeps a leading U+FEFF", () => {
+  // Rust's `String::from_utf8` preserves every code point, including a leading
+  // byte-order mark that the WHATWG TextDecoder strips by default.
+  it("decodes a BOM-prefixed text string to the same bytes", () => {
+    const decoded = decodeCbor(hexToBytes("64efbbbf61"));
+    expect(decoded.type).toBe(3);
+    expect(decoded.value).toBe("\uFEFFa");
+    expect(decoded.toHex()).toBe("64efbbbf61");
+    expect(decodeCbor(hexToBytes("63efbbbf")).toHex()).toBe("63efbbbf");
+  });
+  it("annotates a BOM-prefixed byte string with the BOM in the note", () => {
+    expect(hexAnnotated(cbor(hexToBytes("efbbbf41")))).toBe(
+      `44              # bytes(4)\n    efbbbf41    # "\uFEFFA"`,
+    );
+  });
+});
+
+describe("diagnostic line breaking measures strings in UTF-8 bytes", () => {
   // `diag.rs`: a group breaks when it contains a group, or its strings total
   // more than 20 *bytes*, or its greatest child does. Executed on the
   // reference for every row below.

@@ -1,8 +1,5 @@
 /**
- * Tree traversal system for CBOR data structures.
- *
- * This module provides a visitor pattern implementation for traversing
- * CBOR trees, allowing users to inspect and process elements at any depth.
+ * Depth-first traversal of a CBOR tree with a visitor function.
  *
  * @module walk
  */
@@ -75,10 +72,6 @@ export type WalkElement =
   { type: "single"; cbor: Cbor } | { type: "keyvalue"; key: Cbor; value: Cbor };
 
 /**
- * Helper functions for WalkElement
- */
-
-/**
  * Returns the single CBOR element if this is a 'single' variant.
  *
  * @param element - The walk element to extract from
@@ -140,9 +133,8 @@ const cloneState = <S>(s: S): S => {
   if (s === null) return s;
   const t = typeof s;
   if (t !== "object" && t !== "function") return s;
-  // `structuredClone` is a host-provided global available in modern Node
-  // (≥ 17) and every modern browser; declare it inline so eslint's
-  // `no-undef` is satisfied without a project-wide globals declaration.
+  // Reached through `globalThis` so lint needs no globals declaration for
+  // the host-provided `structuredClone`.
   return (globalThis as { structuredClone(v: unknown): unknown }).structuredClone(s) as S;
 };
 

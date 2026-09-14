@@ -19,6 +19,18 @@ import { Tag } from "./tag";
 import { CborError } from "./error";
 import { bytesToHex } from "./hex";
 
+// Strict UTF-8 decoder for the byte-string annotation. `ignoreBOM` keeps a
+// leading U+FEFF so the note shows every code point the bytes carry, as the
+// reference's `String::from_utf8` does.
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
+// One reused UTF-8 encoder for the text-string lines (TextEncoder is
+// stateless). It encodes the node's string as stored, without the NFC pass the
+// encoder applies, because the reference's `dump_items` uses `s.as_bytes()`
+// rather than `to_cbor_data()` - a node built from a non-NFC string dumps its
+// raw bytes on both sides.
+const utf8Encoder = new TextEncoder();
+
 /**
  * Options for annotated hex formatting.
  */
@@ -51,7 +63,8 @@ export const hexAnnotated = (cbor: Cbor, opts?: HexFormatOpts): string => {
     return Math.max(largest, item.formatFirstColumn().length);
   }, 0);
 
-  // Round up to nearest multiple of 4
+  // One less than the next multiple of 4 above the widest first column, as
+  // the reference's `hex_opt` computes it.
   const roundedNoteColumn = ((noteColumn + 4) & ~3) - 1;
 
   const lines = items.map((item) => item.format(roundedNoteColumn));
@@ -118,9 +131,9 @@ function dumpItems(cbor: Cbor, level: number, tagsStore: TagsStore): DumpItem[] 
         let note: string | undefined = undefined;
         // Try to decode as UTF-8 string for annotation
         try {
-          const text = new TextDecoder("utf-8", { fatal: true }).decode(cbor.value);
+          const text = utf8Decoder.decode(cbor.value);
           const sanitizedText = sanitized(text);
-          if (sanitizedText !== undefined && sanitizedText !== "") {
+          if (sanitizedText !== undefined) {
             note = flanked(sanitizedText, '"', '"');
           }
         } catch {
@@ -133,7 +146,7 @@ function dumpItems(cbor: Cbor, level: number, tagsStore: TagsStore): DumpItem[] 
     }
 
     case MajorType.Text: {
-      const utf8Data = new TextEncoder().encode(cbor.value);
+      const utf8Data = utf8Encoder.encode(cbor.value);
       const header = encodeVarInt(utf8Data.length, MajorType.Text);
       const firstByte = header[0];
       if (firstByte === undefined) {

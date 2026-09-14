@@ -1,16 +1,29 @@
 /**
- * Regression tests for M2 - strict `CborDate.fromString` parsing.
- *
- * Mirrors Rust `Date::from_string`: accept only strict RFC-3339 date-times
- * (seconds + explicit Z/offset) or bare `YYYY-MM-DD` dates (UTC midnight);
- * reject everything else, including the lenient/engine-dependent forms the old
- * `new Date(value)` accepted.
+ * `CborDate` tests against Rust's `Date`: string parsing, the representable
+ * range, component constructors, the (seconds, nanoseconds) model, `WrongTag`
+ * naming and display.
  */
 
 import { describe, test, expect } from "vitest";
-import { CborDate, CborError, decodeCbor, encodeCbor, bytesToHex } from "../src";
+import {
+  CborDate,
+  CborError,
+  decodeCbor,
+  decodeWith,
+  encodeCbor,
+  bytesToHex,
+  hexToBytes,
+  taggedValue,
+  Tag,
+  registerStandardTags,
+  getGlobalTagsStore,
+  tagsForValues,
+  cborEquals,
+} from "../src";
+import { diagnostic } from "../src/diag";
+import { hexAnnotated } from "../src/dump";
 
-describe("M2: strict CborDate.fromString", () => {
+describe("strict CborDate.fromString", () => {
   test("accepts strict RFC-3339 date-times", () => {
     expect(() => CborDate.fromString("2023-02-08T15:30:45Z")).not.toThrow();
     expect(() => CborDate.fromString("2023-02-08T15:30:45.5Z")).not.toThrow();
@@ -57,12 +70,12 @@ describe("M2: strict CborDate.fromString", () => {
 
   test("round-trips a whole-second timestamp through encode", () => {
     const d = CborDate.fromString("2022-03-21T18:24:31Z");
-    // Same instant as Rust's encode_date-style vector.
+    // The instant of Rust's `format_date` vector.
     expect(d.epochSeconds).toBe(1647887071);
   });
 });
 
-describe("range: the reference's representable timestamps (review N2)", () => {
+describe("range: the reference's representable timestamps", () => {
   // chrono's NaiveDateTime::MIN / MAX as Unix seconds (executed on dcbor 0.25.2).
   const MIN = -8334601228800;
   const MAX = 8210266876799;
@@ -237,6 +250,174 @@ describe("fromDate follows `from_datetime`: exact milliseconds, chrono's range",
     expect(() => CborDate.withDurationFromNow(Infinity)).toThrow(CborError);
     expect(CborDate.fromDate(new Date(8210266876799_000)).toString()).toBe(
       "+262142-12-31T23:59:59Z",
+    );
+  });
+});
+
+describe("the (seconds, nanoseconds) model: chrono's instant, not one f64", () => {
+  // Every expected string/byte sequence below was executed on dcbor 0.25.2
+  // (`Date::from_string` / `from_timestamp`, then `to_string()` and
+  // `to_cbor_data()`).
+  const hexOf = (d: CborDate): string => bytesToHex(encodeCbor(d.toCbor()));
+  const MIN = -8334601228800;
+
+  test("a leap second displays as :60 and keeps its wire value", () => {
+    const leap = CborDate.fromString("2023-12-25T10:30:60Z");
+    expect(leap.toString()).toBe("2023-12-25T10:30:60Z");
+    expect(leap.epochSeconds).toBe(1703500260);
+    expect(hexOf(leap)).toBe("c11a658959e4");
+    expect(CborDate.fromString("2023-12-25T23:59:60.5+01:00").toString()).toBe(
+      "2023-12-25T22:59:60Z",
+    );
+    expect(CborDate.fromString("2023-12-31T23:59:60Z").toString()).toBe("2023-12-31T23:59:60Z");
+    // After a CBOR round trip the leap second is an ordinary instant again.
+    expect(CborDate.fromTaggedCbor(decodeCbor(encodeCbor(leap.toCbor()))).toString()).toBe(
+      "2023-12-25T10:31:00Z",
+    );
+  });
+
+  test("equality and ordering compare the pair, as chrono does", () => {
+    const leap = CborDate.fromString("2023-12-25T10:30:60Z");
+    const next = CborDate.fromEpochSeconds(1703500260);
+    const before = CborDate.fromString("2023-12-25T10:30:59.999999999Z");
+    expect(leap.epochSeconds).toBe(next.epochSeconds);
+    expect(leap.equals(next)).toBe(false);
+    expect(leap.compare(next)).toBe(-1);
+    expect(next.compare(leap)).toBe(1);
+    expect(before.compare(leap)).toBe(-1);
+    expect(leap.equals(CborDate.fromString("2023-12-25T10:30:60Z"))).toBe(true);
+    expect(CborDate.fromEpochSeconds(1.5).equals(CborDate.fromEpochSeconds(1.5))).toBe(true);
+    expect(CborDate.fromEpochSeconds(1.5).compare(CborDate.fromEpochSeconds(1.25))).toBe(1);
+  });
+
+  test("sub-second rounding of the f64 wire value does not move the displayed second", () => {
+    // 45.999999999 s: the f64 sum rounds up to …46.0 (that is the wire
+    // value, on both sides), but the instant is still second 45.
+    const d = CborDate.fromString("2023-12-25T10:30:45.999999999Z");
+    expect(d.toString()).toBe("2023-12-25T10:30:45Z");
+    expect(d.epochSeconds).toBe(1703500246);
+    expect(hexOf(d)).toBe("c11a658959d6");
+  });
+
+  test("the range check applies to the truncated whole seconds", () => {
+    const d = CborDate.fromEpochSeconds(MIN - 0.5);
+    expect(hexOf(d)).toBe("c13b000007948cf211ff");
+    expect(d.toString()).toBe("-262143-01-01");
+    expect(CborDate.fromEpochSeconds(MIN - 0.999).toString()).toBe("-262143-01-01");
+    expect(() => CborDate.fromEpochSeconds(MIN - 1)).toThrow(
+      "timestamp outside the representable range",
+    );
+    // MIN - 0.5 as a tag-1 float decodes to MIN as well.
+    const belowMin = decodeCbor(encodeCbor(taggedValue(1, MIN - 0.5)));
+    expect(CborDate.fromTaggedCbor(belowMin).toString()).toBe("-262143-01-01");
+    expect(hexOf(CborDate.fromTaggedCbor(belowMin))).toBe("c13b000007948cf211ff");
+  });
+
+  test("fromDate and toDate carry the millisecond part exactly", () => {
+    const d = CborDate.fromDate(new Date(4190400121));
+    expect(d.toDate().getTime()).toBe(4190400121);
+    expect(CborDate.fromDate(new Date(-500)).toDate().getTime()).toBe(-500);
+    expect(CborDate.fromDate(new Date(-500)).epochSeconds).toBe(-0.5);
+    expect(CborDate.fromDate(new Date(-500)).compare(CborDate.fromEpochSeconds(-1))).toBe(1);
+  });
+});
+
+describe("NaN saturates to the epoch, ±Infinity is InvalidDate (from_timestamp parity)", () => {
+  const hexOf = (d: CborDate): string => bytesToHex(encodeCbor(d.toCbor()));
+  test("construction", () => {
+    const d = CborDate.fromEpochSeconds(NaN);
+    expect(d.toString()).toBe("1970-01-01");
+    expect(d.epochSeconds).toBe(0);
+    expect(hexOf(d)).toBe("c100");
+    expect(d.equals(CborDate.fromEpochSeconds(0))).toBe(true);
+    for (const s of [Infinity, -Infinity]) {
+      expect(() => CborDate.fromEpochSeconds(s)).toThrow("non-finite timestamp");
+    }
+    expect(() => CborDate.fromEpochSeconds(Infinity)).toThrow(CborError);
+  });
+  test("tag-1 decode", () => {
+    const dec = (hex: string) => CborDate.fromTaggedCbor(decodeCbor(hexToBytes(hex)));
+    expect(dec("c1f97e00").toString()).toBe("1970-01-01");
+    expect(hexOf(dec("c1f97e00"))).toBe("c100");
+    expect(() => dec("c1f97c00")).toThrow("non-finite timestamp");
+    expect(() => dec("c1f9fc00")).toThrow("non-finite timestamp");
+  });
+  test("an invalid JS Date has no reference analog and is still rejected", () => {
+    expect(() => CborDate.fromDate(new Date(NaN))).toThrow("non-finite timestamp");
+  });
+});
+
+describe("WrongTag names the expected and actual tags as the reference does", () => {
+  // Executed on dcbor 0.25.2: `Date::from_tagged_cbor` reports
+  // `WrongTag(cbor_tags()[0], tag)`, where the expected tag's name comes from
+  // the global store (`tags_for_values`) and the actual tag keeps the name it
+  // was built with (a decoded tag has none). This file's global store starts
+  // empty; the registered rows run after `registerStandardTags()`.
+  const message = (f: () => unknown): string => {
+    try {
+      f();
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+    return "(no throw)";
+  };
+
+  test("before any registration the expected tag is bare `1`", () => {
+    expect(CborDate.fromEpochSeconds(0).cborTags()[0]?.name).toBeUndefined();
+    expect(CborDate.codec.tags?.[0]?.name).toBeUndefined();
+    expect(message(() => CborDate.fromTaggedCbor(taggedValue(2, 0)))).toBe(
+      "expected CBOR tag 1, but got 2",
+    );
+    expect(message(() => CborDate.fromTaggedCbor(taggedValue(Tag.from(40000, "adhoc"), 0)))).toBe(
+      "expected CBOR tag 1, but got adhoc",
+    );
+    expect(message(() => decodeWith(hexToBytes("d99c4000"), CborDate.codec))).toBe(
+      "expected CBOR tag 1, but got 40000",
+    );
+  });
+
+  test("after registration the expected tag is `date`; the actual tag keeps its own name", () => {
+    registerStandardTags();
+    getGlobalTagsStore().register(Tag.from(40000, "custom"));
+    expect(CborDate.fromEpochSeconds(0).cborTags()[0]?.name).toBe("date");
+    expect(CborDate.codec.tags?.[0]?.name).toBe("date");
+    const [custom] = tagsForValues([40000]);
+    expect(custom?.name).toBe("custom");
+    expect(message(() => CborDate.fromTaggedCbor(taggedValue(custom ?? 40000, 0)))).toBe(
+      "expected CBOR tag date, but got custom",
+    );
+    expect(message(() => CborDate.fromTaggedCbor(taggedValue(Tag.from(40000, "adhoc"), 0)))).toBe(
+      "expected CBOR tag date, but got adhoc",
+    );
+    // A decoded node carries no name, even when the store knows one.
+    expect(message(() => CborDate.fromTaggedCbor(decodeCbor(hexToBytes("d99c4000"))))).toBe(
+      "expected CBOR tag date, but got 40000",
+    );
+    expect(message(() => CborDate.fromTaggedCbor(taggedValue(2, 0)))).toBe(
+      "expected CBOR tag date, but got 2",
+    );
+    const err = (() => {
+      try {
+        CborDate.fromTaggedCbor(taggedValue(Tag.from(40000, "adhoc"), 0));
+      } catch (e) {
+        return e;
+      }
+      return undefined;
+    })();
+    expect(CborError.isCborError(err) && err.code).toBe("WrongTag");
+  });
+
+  test("the carried name never reaches the wire, the diagnostic or the hex dump", () => {
+    const named = taggedValue(Tag.from(40000, "adhoc"), 0);
+    const unnamed = taggedValue(40000, 0);
+    expect(encodeCbor(named)).toEqual(encodeCbor(unnamed));
+    expect(diagnostic(named)).toBe(diagnostic(unnamed));
+    expect(hexAnnotated(named)).toBe(hexAnnotated(unnamed));
+    expect(hexAnnotated(named)).toContain("custom"); // the store's name, not the node's
+    expect(cborEquals(named, unnamed)).toBe(true);
+    const dateNode = CborDate.fromEpochSeconds(0).taggedCbor();
+    expect(dateNode.type === 7 ? undefined : dateNode.type === 6 ? dateNode.tagName : "").toBe(
+      "date",
     );
   });
 });

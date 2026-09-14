@@ -1,2 +1,2 @@
-import { a as asKeyValue, c as walk, i as WalkElement, n as EdgeTypeVariant, o as asSingle, r as Visitor, s as edgeLabel, t as EdgeType } from "./walk-Te23BaT5.mjs";
+import { a as asKeyValue, c as walk, i as WalkElement, n as EdgeTypeVariant, o as asSingle, r as Visitor, s as edgeLabel, t as EdgeType } from "./walk-B0aveFey.mjs";
 export { EdgeType, EdgeTypeVariant, Visitor, WalkElement, asKeyValue, asSingle, edgeLabel, walk };

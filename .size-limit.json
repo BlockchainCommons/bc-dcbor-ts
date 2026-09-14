@@ -2,12 +2,12 @@
   {
     "name": "ESM entry (import *), minified + gzipped",
     "path": "dist/index.mjs",
-    "limit": "10 kB"
+    "limit": "11.5 kB"
   },
   {
     "name": "decode-only ({ decodeCbor }), minified + gzipped",
     "path": "dist/index.mjs",
     "import": "{ decodeCbor }",
-    "limit": "6.5 kB"
+    "limit": "8 kB"
   }
 ]

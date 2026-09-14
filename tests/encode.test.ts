@@ -1,13 +1,10 @@
 /**
- * Encoding tests for dCBOR TypeScript implementation.
- *
- * This file is a complete 1:1 translation of Rust's tests/encode.rs
- *
- * All 35 test functions from the Rust version are translated here.
+ * Encoding tests, ported from Rust's tests/encode.rs, plus TypeScript-specific
+ * cases for bigint input, text normalization, float heads and equality.
  */
 
 import type { Cbor, CborInput } from "../src/cbor";
-import { cbor, encodeCbor, taggedValue } from "../src/cbor";
+import { cbor, encodeCbor, taggedValue, cborEquals } from "../src/cbor";
 import { diagnostic } from "../src/diag";
 import { decodeCbor } from "../src/decode";
 import { ByteString } from "../src/byte-string";
@@ -16,7 +13,16 @@ import { CborSet } from "../src/set";
 import { CborDate } from "../src/date";
 import { Tag } from "../src/tag";
 import { CborError } from "../src/error";
-import { extractCbor, asNumber, asInteger, expectInteger } from "../src/conveniences";
+import {
+  extractCbor,
+  asNumber,
+  asInteger,
+  expectInteger,
+  expectText,
+  expectUnsigned,
+  expectNegative,
+} from "../src/conveniences";
+import { hexAnnotated } from "../src/dump";
 
 /** Helper to convert hex string to Uint8Array */
 function hexToBytes(hex: string): Uint8Array {
@@ -27,18 +33,11 @@ function hexToBytes(hex: string): Uint8Array {
   return bytes;
 }
 
-// P3.8: debug-string surface removed - the former `cborDebug` helper (and the
-// `expectedDebug` parameter on the test helpers below) asserted the deleted
-// debug representation (`map.debug`, Rust-style `{:?}` strings) and was
-// dropped with no replacement.
-
-/** Helper: cborDiagnostic - Get diagnostic description (matches Rust's format!("{}", cbor)) */
+/** Flat diagnostic notation, the counterpart of Rust's `format!("{}", cbor)`. */
 function cborDiagnostic(cborValue: Cbor): string {
-  // Use flat output to match Rust's Display trait (format!("{}", cbor))
   return diagnostic(cborValue, { flat: true });
 }
 
-/** Helper: cborHex - Get hex encoding */
 function cborHex(cborValue: Cbor): string {
   return cborValue.toHex();
 }
@@ -120,7 +119,6 @@ function testCborCodable(value: CborInput, expectedDisplay: string, expectedData
 }
 
 describe("encode tests", () => {
-  // Test 1: encode_unsigned
   describe("encode_unsigned", () => {
     test("encode 0", () => {
       testCborCodable(0, "0", "00");
@@ -158,9 +156,8 @@ describe("encode tests", () => {
       testCborCodable(4294967296, "4294967296", "1b0000000100000000");
     });
 
-    test("encode u64::MAX (JavaScript max safe might differ)", () => {
-      // JavaScript's Number.MAX_SAFE_INTEGER = 9007199254740991
-      // Rust's u64::MAX = 18446744073709551615 (requires BigInt in JS)
+    test("encode Number.MAX_SAFE_INTEGER (stands in for Rust's u64::MAX)", () => {
+      // u64::MAX itself needs a bigint; see the bigint boundary tests below.
       testCborCodable(Number.MAX_SAFE_INTEGER, "9007199254740991", "1b001fffffffffffff");
     });
 
@@ -178,7 +175,6 @@ describe("encode tests", () => {
     });
   });
 
-  // Test 2: encode_signed
   describe("encode_signed", () => {
     test("encode -1", () => {
       testCborCodable(-1, "-1", "20");
@@ -216,13 +212,12 @@ describe("encode tests", () => {
       testCborCodable(2147483647, "2147483647", "1a7fffffff");
     });
 
-    test("encode -9223372036854775808 (i64::MIN - JavaScript safe range)", () => {
-      // Note: JavaScript's MIN_SAFE_INTEGER is -9007199254740991
-      // For full i64 range testing, we'd need BigInt
+    test("encode Number.MIN_SAFE_INTEGER (stands in for Rust's i64::MIN)", () => {
+      // i64::MIN itself needs a bigint; see the bigint boundary tests below.
       testCborCodable(Number.MIN_SAFE_INTEGER, "-9007199254740991", "3b001ffffffffffffe");
     });
 
-    test("encode 9223372036854775807 (i64::MAX - JavaScript safe range)", () => {
+    test("encode Number.MAX_SAFE_INTEGER (stands in for Rust's i64::MAX)", () => {
       testCborCodable(Number.MAX_SAFE_INTEGER, "9007199254740991", "1b001fffffffffffff");
     });
 
@@ -236,13 +231,11 @@ describe("encode tests", () => {
     });
   });
 
-  // Test 3: encode_bytes_1
   test("encode_bytes_1", () => {
     const bytes = new Uint8Array([0x00, 0x11, 0x22, 0x33]);
     testCborCodable(new ByteString(bytes), "h'00112233'", "4400112233");
   });
 
-  // Test 4: encode_bytes
   describe("encode_bytes", () => {
     test("encode 32-byte string", () => {
       const bytes = hexToBytes("c0a7da14e5847c526244f7e083d26fe33f86d2313ad2b77164233444423a50a7");
@@ -259,7 +252,6 @@ describe("encode tests", () => {
     });
   });
 
-  // Test 5: encode_string
   describe("encode_string", () => {
     test('encode "Hello"', () => {
       testCborCodable("Hello", '"Hello"', "6548656c6c6f");
@@ -276,7 +268,6 @@ describe("encode tests", () => {
     });
   });
 
-  // Test 6: test_normalized_string
   test("test_normalized_string", () => {
     const composedEAcute = "\u{00E9}"; // é in NFC
     const decomposedEAcute = "\u{0065}\u{0301}"; // e + combining acute accent in NFD
@@ -303,7 +294,53 @@ describe("encode tests", () => {
     );
   });
 
-  // Test 7: encode_array
+  // The node keeps the constructed string and the encoder applies NFC, as
+  // Rust's `CBORCase::Text` and `to_cbor_data` do. Every expected string below
+  // was executed on the reference.
+  describe("text nodes keep the constructed string; NFC applies at encode time", () => {
+    const nfd = "e\u0301"; // "é" decomposed: 65 cc 81
+    const nfc = "\u00e9"; // "é" composed:   c3 a9
+
+    test("cbor(string) stores the string verbatim", () => {
+      const c = cbor(nfd);
+      expect(expectText(c)).toBe(nfd);
+      expect(expectText(c)).not.toBe(nfc);
+      expect(bytesToHex(new TextEncoder().encode(expectText(c)))).toBe("65cc81");
+    });
+
+    test("encodeCbor emits the NFC form", () => {
+      expect(bytesToHex(encodeCbor(cbor(nfd)))).toBe("62c3a9");
+      expect(bytesToHex(encodeCbor(cbor(nfc)))).toBe("62c3a9");
+      // U+212B ANGSTROM SIGN is a singleton decomposition to U+00C5.
+      expect(bytesToHex(encodeCbor(cbor("\u212b")))).toBe("62c385");
+      expect(bytesToHex(encodeCbor(cbor("\u00c5")))).toBe("62c385");
+      // A bare Text node (no constructor involved) is normalized too.
+      const bare: CborInput = { isCbor: true, type: 3, value: nfd } as unknown as Cbor;
+      expect(bytesToHex(encodeCbor(bare))).toBe("62c3a9");
+    });
+
+    test("diagnostic and hexAnnotated show the stored string (Rust dump.rs parity)", () => {
+      const c = cbor(nfd);
+      expect(diagnostic(c)).toBe(`"${nfd}"`);
+      expect(hexAnnotated(c)).toBe(`63          # text(3)\n    65cc81  # "${nfd}"`);
+      expect(hexAnnotated(cbor(nfc))).toBe(`62          # text(2)\n    c3a9    # "${nfc}"`);
+    });
+
+    test("map keys compare by encoded bytes, so NFD and NFC are the same key", () => {
+      const m = new CborMap();
+      m.set(nfd, 1);
+      m.set(nfc, 2);
+      expect(m.size).toBe(1);
+      expect(bytesToHex(encodeCbor(m))).toBe("a162c3a902");
+      expect(CborSet.from([nfd, nfc]).size).toBe(1);
+    });
+
+    test("decoding still rejects non-NFC input", () => {
+      expect(() => decodeCbor(hexToBytes("6365cc81"))).toThrow(CborError);
+      expect(decodeCbor(hexToBytes("62c3a9")).value).toBe(nfc);
+    });
+  });
+
   describe("encode_array", () => {
     test("encode empty array", () => {
       testCbor([], "[]", "80");
@@ -318,7 +355,6 @@ describe("encode tests", () => {
     });
   });
 
-  // Test 8: encode_heterogenous_array
   test("encode_heterogenous_array", () => {
     const array = [1, "Hello", [1, 2, 3]];
     testCbor(array, '[1, "Hello", [1, 2, 3]]', "83016548656c6c6f83010203");
@@ -334,7 +370,6 @@ describe("encode tests", () => {
     expect(extractedArray[2]).toEqual([1, 2, 3]);
   });
 
-  // Test 9: encode_map
   describe("encode_map", () => {
     test("encode empty map", () => {
       const m = new CborMap();
@@ -368,7 +403,6 @@ describe("encode tests", () => {
     });
   });
 
-  // Test 10: encode_map_with_map_keys
   test("encode_map_with_map_keys", () => {
     const k1 = new CborMap();
     k1.set(1, 2);
@@ -383,7 +417,6 @@ describe("encode tests", () => {
     testCbor(m, "{{1: 2}: 5, {3: 4}: 6}", "a2a1010205a1030406");
   });
 
-  // Test 11: encode_anders_map
   test("encode_anders_map", () => {
     const m = new CborMap();
     m.set(1, 45.7);
@@ -394,18 +427,15 @@ describe("encode tests", () => {
     expect(extractCbor(m.getOrThrow(1))).toBe(45.7);
   });
 
-  // Test 12: encode_map_misordered
   test("encode_map_misordered", () => {
     expect(() => decodeCbor(hexToBytes("a2026141016142"))).toThrow(/canonical order/i);
   });
 
-  // Test 13: encode_tagged
   test("encode_tagged", () => {
     const tagged = taggedValue(1, "Hello");
     testCbor(tagged, '1("Hello")', "c16548656c6c6f");
   });
 
-  // Test 14: encode_value
   describe("encode_value", () => {
     test("encode false", () => {
       testCbor(false, "false", "f4");
@@ -416,10 +446,7 @@ describe("encode tests", () => {
     });
   });
 
-  // Test 15: encode_envelope
   test("encode_envelope", () => {
-    // P3.5: {tag, value} literal inputs no longer encode as tagged values;
-    // build tagged values explicitly with taggedValue() (identical bytes).
     const alice = taggedValue(200, taggedValue(201, "Alice"));
     const knows = taggedValue(200, taggedValue(201, "knows"));
     const bob = taggedValue(200, taggedValue(201, "Bob"));
@@ -439,8 +466,8 @@ describe("encode tests", () => {
     expect(encodeCbor(envelope)).toEqual(encodeCbor(decodedCbor));
   });
 
-  // P3.5: the {tag, value} key-sniffing input mapping is removed - a plain
-  // two-key {tag, value} literal now throws CborError with code "Custom".
+  // A plain two-key {tag, value} literal is rejected rather than taken for a
+  // tagged value; tagged values are built with taggedValue().
   test("plain {tag, value} literal throws CborError code Custom", () => {
     let error: unknown;
     try {
@@ -452,8 +479,8 @@ describe("encode tests", () => {
     expect(CborError.isCborError(error) && error.code).toBe("Custom");
   });
 
-  // Test 16: encode_float - full 1:1 port of Rust encode.rs `encode_float`
-  // (all ~30 vectors, including the numeric-reduction boundary cliffs).
+  // Port of Rust's `encode_float`, including the numeric-reduction boundary
+  // cliffs.
   describe("encode_float", () => {
     test("shortest accurate representation", () => {
       testCbor(1.5, "1.5", "f93e00");
@@ -526,10 +553,9 @@ describe("encode tests", () => {
       testCbor(1.7976931348623157e308, "1.7976931348623157e308", "fb7fefffffffffffff");
     });
 
-    test("large whole-valued JS numbers reduce to integers like the bigint path (C1)", () => {
-      // Regression for C1: a whole `number` beyond the JS safe-integer range
-      // must encode as an integer (matching Rust `From<f64>` and the bigint
-      // path), not as a float.
+    test("large whole-valued JS numbers reduce to integers like the bigint path", () => {
+      // A whole `number` beyond the safe-integer range encodes as an integer,
+      // as Rust's `From<f64>` and the bigint path do, not as a float.
       expect(cbor(2 ** 53).toHex()).toBe("1b0020000000000000");
       expect(cbor(2 ** 53).toHex()).toBe(cbor(9007199254740992n).toHex());
       expect(cbor(2 ** 63).toHex()).toBe("1b8000000000000000");
@@ -537,7 +563,164 @@ describe("encode tests", () => {
     });
   });
 
-  // Test 17: int_coerced_to_float
+  // Float heads are judged by the reference's
+  // `validate_canonical_f16/f32/f64` predicates (saturating `as i32`/`as i64`
+  // casts) and decode to the node `From<f32>`/`From<f64>` builds. Every row
+  // was executed on dcbor 0.25.2.
+  describe("decoding whole-valued f32/f64 heads (Rust validate_canonical_* parity)", () => {
+    const dec = (hex: string) => decodeCbor(hexToBytes(hex));
+
+    test("f32 wholes at or beyond 2^31 are accepted and reduce to integers", () => {
+      const c = dec("fa4f000001"); // 2^31 + 256
+      expect(c.type).toBe(0);
+      expect(expectUnsigned(c)).toBe(2147483904);
+      expect(c.toHex()).toBe("1a80000100");
+      expect(dec("fa4f7fffff").toHex()).toBe("1affffff00"); // 2^32 - 256
+      expect(dec("facf000001").toHex()).toBe("3a80000100"); // -(2^31 + 256) -> -2147483905
+      expect(cborDiagnostic(dec("facf000001"))).toBe("-2147483905");
+    });
+
+    test("negative f32 magnitudes are computed in f32 arithmetic (-1f32 - n)", () => {
+      const c = dec("fadf000000"); // -2^63
+      expect(c.toHex()).toBe("3b8000000000000000");
+      expect(cborDiagnostic(c)).toBe("-9223372036854775809");
+      expect(expectNegative(c)).toBe(-9223372036854775809n);
+      const d = dec("fadb000000"); // -2^55
+      expect(d.toHex()).toBe("3b0080000000000000");
+      expect(cborDiagnostic(d)).toBe("-36028797018963969");
+    });
+
+    test("f32 wholes with no fitting integer stay floats and round-trip", () => {
+      for (const hex of ["fa4f800000", "fa4fc00000", "fa5a000000", "fa5f000000", "fadf800000"]) {
+        const c = dec(hex);
+        expect(c.type).toBe(7);
+        expect(c.toHex()).toBe(hex);
+      }
+      expect(extractCbor(dec("fa4f800000"))).toBe(4294967296);
+    });
+
+    test("f64 wholes beyond the i64 saturation bound are accepted", () => {
+      expect(dec("fb43e0000000000001").toHex()).toBe("1b8000000000000800"); // 2^63 + 2048
+      expect(dec("fbc3e0000000000001").toHex()).toBe("3b80000000000007ff"); // -(2^63 + 2048)
+    });
+
+    test("the exact saturation bounds are still non-canonical", () => {
+      for (const hex of ["fa4f000000", "facf000000", "fb43e0000000000000", "fbc3e0000000000000"]) {
+        let error: unknown;
+        try {
+          dec(hex);
+        } catch (e) {
+          error = e;
+        }
+        expect(CborError.isCborError(error) && error.code, hex).toBe("NonCanonicalNumeric");
+      }
+    });
+
+    test("f16 heads keep the same accept set", () => {
+      expect(dec("f97e00").toHex()).toBe("f97e00"); // canonical NaN
+      expect(dec("f93e00").toHex()).toBe("f93e00"); // 1.5
+      for (const hex of ["f97e01", "f94200", "f98000", "f90000"]) {
+        expect(() => dec(hex), hex).toThrow(CborError);
+      }
+    });
+  });
+
+  // `cborEquals` is the reference's `PartialEq for CBOR`, not a
+  // byte comparison. Every row was executed on dcbor 0.25.2 (`==`).
+  describe("cborEquals is structural (Rust PartialEq parity)", () => {
+    const float = (v: number): Cbor =>
+      cbor({ isCbor: true, type: 7, value: { type: "Float", value: v } } as unknown as Cbor);
+
+    test("a whole-valued float node is not the integer it encodes as", () => {
+      expect(encodeCbor(float(2))).toEqual(encodeCbor(cbor(2)));
+      expect(cborEquals(float(2), cbor(2))).toBe(false);
+      expect(cborEquals(float(-0), cbor(0))).toBe(false);
+      expect(cborEquals(float(-1), cbor(-1))).toBe(false);
+      expect(cborEquals(cbor([float(1)]), cbor([1]))).toBe(false);
+    });
+
+    test("floats compare by value, with NaN equal to NaN", () => {
+      expect(cborEquals(float(-0), float(0))).toBe(true);
+      expect(cborEquals(float(NaN), float(NaN))).toBe(true);
+      expect(cborEquals(cbor(1.5), cbor(1.5))).toBe(true);
+      expect(cborEquals(cbor(1.5), cbor(2.5))).toBe(false);
+    });
+
+    test("integers compare by value across number and bigint", () => {
+      expect(cborEquals(cbor(5), cbor(5n))).toBe(true);
+      expect(cborEquals(cbor(-5), cbor(-5n))).toBe(true);
+      expect(cborEquals(cbor(2n ** 63n), cbor(2 ** 63))).toBe(true);
+      expect(cborEquals(cbor(5), cbor(6))).toBe(false);
+      expect(cborEquals(cbor(5), cbor(-5))).toBe(false);
+    });
+
+    test("text compares the stored string, so NFD is not NFC", () => {
+      expect(cborEquals(cbor("e\u0301"), cbor("\u00e9"))).toBe(false);
+      expect(cborEquals(cbor("\u00e9"), cbor("\u00e9"))).toBe(true);
+      expect(cborEquals(cbor("ab"), cbor(new TextEncoder().encode("ab")))).toBe(false);
+    });
+
+    test("byte strings compare bytewise", () => {
+      expect(cborEquals(cbor(new Uint8Array([1, 2])), cbor(new Uint8Array([1, 2])))).toBe(true);
+      expect(cborEquals(cbor(new Uint8Array([1, 2])), cbor(new Uint8Array([1, 2, 3])))).toBe(false);
+    });
+
+    test("tags compare by value only; the carried name is ignored", () => {
+      expect(cborEquals(taggedValue(Tag.from(1, "date"), 0), taggedValue(1, 0))).toBe(true);
+      expect(cborEquals(taggedValue(1, 0), taggedValue(2, 0))).toBe(false);
+      expect(cborEquals(taggedValue(1, 0), taggedValue(1, 1))).toBe(false);
+    });
+
+    test("maps compare entry by entry in canonical order, keys and values structurally", () => {
+      const ab = new CborMap();
+      ab.set("a", 1);
+      ab.set("b", 2);
+      const ba = new CborMap();
+      ba.set("b", 2);
+      ba.set("a", 1);
+      expect(cborEquals(cbor(ab), cbor(ba))).toBe(true);
+      const a = new CborMap();
+      a.set("a", 1);
+      expect(cborEquals(cbor(ab), cbor(a))).toBe(false);
+      const floatKey = new CborMap();
+      floatKey.set(float(1), "x");
+      const intKey = new CborMap();
+      intKey.set(1, "x");
+      expect(encodeCbor(floatKey)).toEqual(encodeCbor(intKey));
+      expect(cborEquals(cbor(floatKey), cbor(intKey))).toBe(false);
+      const nfdKey = new CborMap();
+      nfdKey.set("e\u0301", 1);
+      const nfcKey = new CborMap();
+      nfcKey.set("\u00e9", 1);
+      expect(cborEquals(cbor(nfdKey), cbor(nfcKey))).toBe(false);
+    });
+
+    test("nested structures, decoded vs constructed", () => {
+      const ab = new CborMap();
+      ab.set("a", 1);
+      ab.set("b", 2);
+      const nested = taggedValue(5, [ab, [1, 1.5]]);
+      expect(cborEquals(nested, decodeCbor(encodeCbor(nested)))).toBe(true);
+      expect(cborEquals(nested, taggedValue(5, [ab, [1, 2.5]]))).toBe(false);
+      expect(cborEquals(nested, taggedValue(6, [ab, [1, 1.5]]))).toBe(false);
+    });
+  });
+
+  // Nesting is bounded only by the host stack on both sides; 1,000 levels
+  // must work everywhere.
+  test("a 1,000-deep array decodes, re-encodes identically and renders", () => {
+    const depth = 1000;
+    const bytes = new Uint8Array(depth + 1);
+    bytes.fill(0x81, 0, depth);
+    bytes[depth] = 0x00;
+    const decoded = decodeCbor(bytes);
+    expect(encodeCbor(decoded)).toEqual(bytes);
+    const flat = diagnostic(decoded, { flat: true });
+    expect(flat).toBe(`${"[".repeat(depth)}0${"]".repeat(depth)}`);
+    // Every level but the innermost `[0]` opens and closes on its own line.
+    expect(diagnostic(decoded).split("\n").length).toBe(2 * depth - 1);
+  });
+
   test("int_coerced_to_float", () => {
     const n = 42;
     const c = cbor(n);
@@ -549,7 +732,6 @@ describe("encode tests", () => {
     expect(i).toBe(n);
   });
 
-  // Test 18: fail_float_coerced_to_int
   test("fail_float_coerced_to_int", () => {
     // Floating point values cannot be coerced to integer types (mirrors Rust
     // `i32::try_from(c)` returning Err for a fractional float).
@@ -562,22 +744,18 @@ describe("encode tests", () => {
     expect(() => expectInteger(c)).toThrow();
   });
 
-  // Test 19: non_canonical_float_1
   test("non_canonical_float_1", () => {
     expect(() => decodeCbor(hexToBytes("FB3FF8000000000000"))).toThrow(/canonical/i);
   });
 
-  // Test 20: non_canonical_float_2
   test("non_canonical_float_2", () => {
     expect(() => decodeCbor(hexToBytes("F94A00"))).toThrow(/canonical/i);
   });
 
-  // Test 21: unused_data
   test("unused_data", () => {
     expect(() => decodeCbor(hexToBytes("0001"))).toThrow(/extra bytes/i);
   });
 
-  // Test 22: tag
   test("tag", () => {
     const tag = Tag.from(1, "A");
     expect(tag.name).toBe("A");
@@ -588,12 +766,10 @@ describe("encode tests", () => {
     expect(tag2.value).toBe(2);
   });
 
-  // Test 23: encode_date
   test("encode_date", () => {
     testCborCodable(CborDate.fromEpochSeconds(1675854714.0), "1(1675854714)", "c11a63e3837a");
   });
 
-  // Test 24: convert_values
   describe("convert_values", () => {
     function testConvert(value: CborInput) {
       const cborValue = cbor(value);
@@ -621,7 +797,7 @@ describe("encode tests", () => {
     test("convert ByteString", () => testConvert(new ByteString(hexToBytes("001122334455"))));
   });
 
-  // Test 25: convert_hash_map (TypeScript uses Map)
+  // Rust's HashMap and BTreeMap tests both use a JS Map.
   test("convert_hash_map", () => {
     const h = new Map<number, string>();
     h.set(1, "A");
@@ -638,7 +814,6 @@ describe("encode tests", () => {
     expect(h2.get(50)).toBe("B");
   });
 
-  // Test 26: convert_btree_map (same as hash_map in TypeScript)
   test("convert_btree_map", () => {
     const h = new Map<number, string>();
     h.set(1, "A");
@@ -655,7 +830,7 @@ describe("encode tests", () => {
     expect(h2.get(50)).toBe("B");
   });
 
-  // Test 27: convert_vector
+  // Rust's Vec and VecDeque tests both use a JS array.
   test("convert_vector", () => {
     const v = [1, 50, 25];
     const c = cbor(v);
@@ -665,7 +840,6 @@ describe("encode tests", () => {
     expect(v2).toEqual(v);
   });
 
-  // Test 28: convert_vecdeque (TypeScript arrays work the same)
   test("convert_vecdeque", () => {
     const v = [1, 50, 25];
     const c = cbor(v);
@@ -675,7 +849,6 @@ describe("encode tests", () => {
     expect(v2).toEqual(v);
   });
 
-  // Test 29: convert_hashset (TypeScript Set)
   test("convert_hashset", () => {
     const v = new Set<number>([1, 50, 25]);
     const c = cbor(v);
@@ -686,14 +859,12 @@ describe("encode tests", () => {
     expect(v2.has(25)).toBe(true);
   });
 
-  // Test 30: usage_test_1
   test("usage_test_1", () => {
     const array = [1000, 2000, 3000];
     const cborValue = cbor(array);
     expect(cborHex(cborValue)).toBe("831903e81907d0190bb8");
   });
 
-  // Test 31: usage_test_2
   test("usage_test_2", () => {
     const data = hexToBytes("831903e81907d0190bb8");
     const cborValue = decodeCbor(data);
@@ -703,7 +874,6 @@ describe("encode tests", () => {
     expect(array).toEqual([1000, 2000, 3000]);
   });
 
-  // Test 32: encode_nan
   test("encode_nan", () => {
     const canonicalNanData = hexToBytes("f97e00");
 
@@ -714,7 +884,6 @@ describe("encode tests", () => {
     expect(encodeCbor(cbor(NaN))).toEqual(canonicalNanData);
   });
 
-  // Test 33: decode_nan
   test("decode_nan", () => {
     // Canonical NaN decodes
     const canonicalNanData = hexToBytes("f97e00");
@@ -728,7 +897,7 @@ describe("encode tests", () => {
     expect(() => decodeCbor(hexToBytes("fb7ff9100000000001"))).toThrow();
   });
 
-  // Test 34: encode_infinit (typo preserved from Rust)
+  // The name keeps the Rust test's spelling.
   test("encode_infinit", () => {
     const canonicalInfinityData = hexToBytes("f97c00");
     const canonicalNegInfinityData = hexToBytes("f9fc00");
@@ -737,7 +906,6 @@ describe("encode tests", () => {
     expect(encodeCbor(cbor(-Infinity))).toEqual(canonicalNegInfinityData);
   });
 
-  // Test 35: decode_infinity
   test("decode_infinity", () => {
     const canonicalInfinityData = hexToBytes("f97c00");
     const canonicalNegInfinityData = hexToBytes("f9fc00");
@@ -758,8 +926,8 @@ describe("encode tests", () => {
     expect(() => decodeCbor(hexToBytes("fbfff0000000000000"))).toThrow();
   });
 
-  // Set parity with Rust `dcbor` (C5): a Set is a PLAIN UNTAGGED ARRAY in
-  // strict ascending CBOR-byte order with no duplicates - NOT tag-258.
+  // As in Rust `dcbor`, a Set is an untagged array in strictly ascending
+  // CBOR-byte order with no duplicates (no tag 258).
   describe("set (untagged array, Rust parity)", () => {
     test("encodes as an untagged array through every path", () => {
       const set = CborSet.from([3, 1, 2]);
@@ -797,9 +965,9 @@ describe("encode tests", () => {
       expect(() => CborSet.fromCbor(c)).toThrow();
     });
 
-    test("does NOT emit a tag-258 wrapper", () => {
+    test("does not emit a tag-258 wrapper", () => {
       const set = CborSet.from([1, 2, 3]);
-      // The old (incorrect) tag-258 encoding was d9010283010203.
+      // d90102 is the tag-258 head.
       expect(bytesToHex(set.toBytes())).not.toContain("d90102");
     });
   });
