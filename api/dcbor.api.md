@@ -256,9 +256,13 @@ export class CborMap {
     clear(): void;
     // (undocumented)
     delete(key: CborInput): boolean;
+    // @internal
+    encodedKeyAt(i: number): Uint8Array;
     entries(): Generator<[Cbor, Cbor], void, undefined>;
     // @internal
     get entriesArray(): MapEntry[];
+    // @internal
+    entryAt(i: number): MapEntry;
     forEach(callback: (value: Cbor, key: Cbor, map: CborMap) => void, thisArg?: unknown): void;
     get(key: CborInput): Cbor | undefined;
     getOrThrow(key: CborInput): Cbor;

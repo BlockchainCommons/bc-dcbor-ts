@@ -231,15 +231,17 @@ export const cborEquals = (a: Cbor, b: Cbor): boolean => {
 /**
  * `PartialEq for Map` (`map.rs`): the same entries in canonical key order,
  * each with a structurally equal stored key node and value node. Both maps
- * iterate in encoded-key order, so a lockstep walk is exact.
+ * iterate in encoded-key order, so a lockstep walk is exact, and like the
+ * reference's `BTreeMap` equality it stops at the first mismatch. (The
+ * reference also compares the stored key bytes; that is implied here, since
+ * structurally equal key nodes always encode to the same bytes.)
  */
 const mapEquals = (a: CborMap, b: CborMap): boolean => {
-  if (a.size !== b.size) return false;
-  const left = a.entriesArray;
-  const right = b.entriesArray;
-  for (let i = 0; i < left.length; i++) {
-    const l = left[i];
-    const r = right[i];
+  const n = a.size;
+  if (n !== b.size) return false;
+  for (let i = 0; i < n; i++) {
+    const l = a.entryAt(i);
+    const r = b.entryAt(i);
     if (!cborEquals(l.key, r.key) || !cborEquals(l.value, r.value)) return false;
   }
   return true;
@@ -490,11 +492,17 @@ const writeCborInto = (writer: BufWriter, value: CborInput): void => {
       }
       return;
     case MajorType.Map: {
-      const entries = c.value.entriesArray;
-      writeVarInt(writer, entries.length, MajorType.Map);
-      for (const { key, value: entryValue } of entries) {
-        writeCborInto(writer, key);
-        writeCborInto(writer, entryValue);
+      const map = c.value;
+      const n = map.size;
+      writeVarInt(writer, n, MajorType.Map);
+      for (let i = 0; i < n; i++) {
+        // Write the stored encoded key bytes - the bytes the entry is sorted
+        // by - as the reference's `Map::cbor_data` (`map.rs`) writes its
+        // `MapKey`. Re-encoding the key node would produce the same bytes
+        // (encoding is deterministic) at the cost of a second NFC + UTF-8
+        // pass for every text key.
+        writer.writeBytes(map.encodedKeyAt(i));
+        writeCborInto(writer, map.entryAt(i).value);
       }
       return;
     }

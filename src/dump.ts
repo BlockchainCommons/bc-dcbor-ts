@@ -24,6 +24,13 @@ import { bytesToHex } from "./hex";
 // reference's `String::from_utf8` does.
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
+// One reused UTF-8 encoder for the text-string lines (TextEncoder is
+// stateless). It encodes the node's string as stored, without the NFC pass the
+// encoder applies, because the reference's `dump_items` uses `s.as_bytes()`
+// rather than `to_cbor_data()` - a node built from a non-NFC string dumps its
+// raw bytes on both sides.
+const utf8Encoder = new TextEncoder();
+
 /**
  * Options for annotated hex formatting.
  */
@@ -138,7 +145,7 @@ function dumpItems(cbor: Cbor, level: number, tagsStore: TagsStore): DumpItem[] 
     }
 
     case MajorType.Text: {
-      const utf8Data = new TextEncoder().encode(cbor.value);
+      const utf8Data = utf8Encoder.encode(cbor.value);
       const header = encodeVarInt(utf8Data.length, MajorType.Text);
       const firstByte = header[0];
       if (firstByte === undefined) {

@@ -479,13 +479,20 @@ const rustShortestDigits = (abs: number): { digits: string; exp10: number } => {
 };
 
 /**
- * Render a float to its diagnostic string, matching Rust's `{:?}` for `f64`.
+ * Render a float to its diagnostic string, the reference's `Display for
+ * Simple` (`simple.rs`) - the rendering `diagnostic()` and `hexAnnotated()`
+ * use.
  *
- * Finite non-zero values with magnitude in [1e-4, 1e16) print in decimal with
- * at least one fractional digit (whole values get a trailing `.0`); everything
- * else prints in exponential form (`1.5e20`, `5e-324` - no `+`, no padding).
- * Zero prints as `0.0`/`-0.0`. Digits are the shortest round-trip sequence,
- * with exact decimal ties rounded up like Rust (see {@link rustShortestDigits}).
+ * Non-finite values print as `NaN`, `Infinity` and `-Infinity`, exactly as the
+ * reference's `Display` does - not the `inf`/`-inf` of Rust's `{:?}`, which is
+ * `Simple::name()`'s rendering and is ported as `simpleName` (`simple.ts`).
+ *
+ * Finite values match Rust's `{:?}` for `f64`: non-zero values with magnitude
+ * in [1e-4, 1e16) print in decimal with at least one fractional digit (whole
+ * values get a trailing `.0`); everything else prints in exponential form
+ * (`1.5e20`, `5e-324` - no `+`, no padding). Zero prints as `0.0`/`-0.0`.
+ * Digits are the shortest round-trip sequence, with exact decimal ties rounded
+ * up like Rust (see {@link rustShortestDigits}).
  *
  * @param value - The float value
  * @returns The diagnostic string

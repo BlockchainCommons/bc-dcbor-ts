@@ -160,6 +160,30 @@ export class CborMap {
     }));
   }
 
+  /**
+   * The stored entry at position `i` in canonical ascending encoded-key
+   * order; the caller keeps `i` within `[0, size)`.
+   *
+   * @internal Positional access for the encoder and for structural equality,
+   * which walk a map (or two maps in lockstep) without materializing
+   * `entriesArray`; not part of the supported surface.
+   */
+  entryAt(i: number): MapEntry {
+    return this._dict.valueAt(i);
+  }
+
+  /**
+   * The encoded CBOR bytes of the key at position `i` - the bytes the entry
+   * is sorted by, computed once when it was inserted.
+   *
+   * @internal The encoder writes these directly, as the reference's
+   * `Map::cbor_data` writes its stored `MapKey`, instead of re-encoding the
+   * key node; not part of the supported surface.
+   */
+  encodedKeyAt(i: number): Uint8Array {
+    return this._dict.keyAt(i);
+  }
+
   /** Iterate keys in canonical (sorted encoded-key) order. */
   *keys(): Generator<Cbor, void, undefined> {
     for (const entry of this.entriesArray) {
