@@ -39,6 +39,7 @@ import {
   decodeOutcome,
   encodeOutcome,
   hexToBytes,
+  type Recipe,
   type VectorApi,
 } from "./vectors/recipes";
 import { categories, corpusSize } from "./corpus/corpus";
@@ -64,7 +65,8 @@ type DecodeDiffOutcome = { ok: true; hex: string } | { ok: false; code: string; 
  * Deliberate decode-behavior change landed AFTER the frozen baseline:
  * byte-string/text lengths >= 2^53 (bigint after narrowing) now report
  * `Underrun` like Rust's usize bounds check instead of the baseline's
- * `OutOfRange` input guard - see RUST_DIVERGENCES.md. Both builds still
+ * `OutOfRange` input guard (`bc-dcbor-rust/src/decode.rs:110-115`, the
+ * `parse_bytes` bounds check). Both builds still
  * reject; only the code differs. The baseline's decode stage raised
  * OutOfRange ONLY from that bigint-length guard (asserted by the golden
  * fixture hygiene test), so this exact code pair - and nothing else - is
@@ -78,6 +80,75 @@ const isKnownLengthCodeChange = (base: DecodeDiffOutcome, cur: DecodeDiffOutcome
   cur.stage === "decode" &&
   base.code === "OutOfRange" &&
   cur.code === "Underrun";
+
+/**
+ * Deliberate decode-behavior change landed AFTER the frozen baseline: a text
+ * string starting with U+FEFF keeps that code point (Rust `String::from_utf8`
+ * parity; the baseline used the WHATWG TextDecoder default, which strips a
+ * leading BOM, so its re-encode dropped the three bytes). Signature: both
+ * builds accept, the working tree re-encodes the input byte-identically, the
+ * baseline does not, and the input carries the UTF-8 BOM sequence. See
+ * RUST_DIVERGENCES.md.
+ */
+const isKnownBomKeepChange = (
+  input: Uint8Array,
+  base: DecodeDiffOutcome,
+  cur: DecodeDiffOutcome,
+): boolean => {
+  if (!base.ok || !cur.ok) return false;
+  const inputHex = bytesToHex(input);
+  return cur.hex === inputHex && base.hex !== inputHex && inputHex.includes("efbbbf");
+};
+
+/**
+ * Deliberate decode-behavior change landed AFTER the frozen baseline
+ * (DCBOR-05): whole-valued f32/f64 heads at or beyond the saturating-cast
+ * bounds (`fa4f000001`, `fa4f800000`, `fb43e0000000000001`, …) are accepted
+ * as the reference's `validate_canonical_f32/f64` accept them, and decode to
+ * the integer node `From<f32/f64>` builds. The baseline's re-encode check
+ * rejected every such head as NonCanonicalNumeric. Signature: baseline
+ * rejects at the decode stage with that code, the working tree either
+ * accepts or fails LATER in the input with a different decode-stage code
+ * (a corruption mutation appends bytes after the head: the baseline stops at
+ * the head, the working tree reads past it and reports UnusedData), and the
+ * input carries a single- or double-precision head byte.
+ */
+const isKnownWholeFloatAcceptChange = (
+  input: Uint8Array,
+  base: DecodeDiffOutcome,
+  cur: DecodeDiffOutcome,
+): boolean =>
+  !base.ok &&
+  base.stage === "decode" &&
+  base.code === "NonCanonicalNumeric" &&
+  (cur.ok || (cur.stage === "decode" && cur.code !== "NonCanonicalNumeric")) &&
+  input.some((b) => b === 0xfa || b === 0xfb);
+
+/**
+ * Deliberate encode-behavior change landed AFTER the frozen baseline
+ * (DCBOR-09): `CborDate.fromEpochSeconds(NaN)` is the epoch, as the
+ * reference's `from_timestamp` saturates it (`trunc() as i64` → 0), where the
+ * baseline threw InvalidDate. Signature: the recipe holds a NaN `date`, the
+ * baseline threw that code, the working tree encodes.
+ */
+const isKnownNanDateChange = (
+  recipe: Recipe,
+  base: { ok: true; hex: string } | { ok: false; code: string },
+  cur: { ok: true; hex: string } | { ok: false; code: string },
+): boolean =>
+  !base.ok &&
+  base.code === "InvalidDate" &&
+  cur.ok &&
+  JSON.stringify(recipe).includes('{"k":"date","seconds":"NaN"}');
+
+const isKnownDecodeChange = (
+  input: Uint8Array,
+  base: DecodeDiffOutcome,
+  cur: DecodeDiffOutcome,
+): boolean =>
+  isKnownLengthCodeChange(base, cur) ||
+  isKnownBomKeepChange(input, base, cur) ||
+  isKnownWholeFloatAcceptChange(input, base, cur);
 
 /**
  * Integrity pin for the frozen baseline. Without this, an accidental
@@ -178,7 +249,9 @@ describe("differential corpus: baseline vs working tree", () => {
           (base.ok && cur.ok && base.hex !== cur.hex) ||
           (!base.ok && !cur.ok && base.code !== cur.code)
         ) {
-          report(name, `baseline ${outcomeStr(base)} != current ${outcomeStr(cur)}`);
+          if (!isKnownNanDateChange(recipe, base, cur)) {
+            report(name, `baseline ${outcomeStr(base)} != current ${outcomeStr(cur)}`);
+          }
           index++;
           continue;
         }
@@ -192,7 +265,7 @@ describe("differential corpus: baseline vs working tree", () => {
           const curDec = decodeOutcome(current, encoded.slice());
           if (
             JSON.stringify(baseDec) !== JSON.stringify(curDec) &&
-            !isKnownLengthCodeChange(baseDec, curDec)
+            !isKnownDecodeChange(encoded, baseDec, curDec)
           ) {
             report(
               name,
@@ -201,9 +274,10 @@ describe("differential corpus: baseline vs working tree", () => {
           } else if (baseDec.ok && baseDec.hex !== base.hex) {
             report(name, `decode round-trip broke: ${outcomeStr(baseDec)} for ${base.hex}`);
           }
-          // NB: both builds REJECTING the encoder's own output identically is
-          // legal - the frozen bare-Float quirk emits 0xfa floats for whole
-          // values that the decoder's canonicality re-encode refuses.
+          // NB: the bare-Float ladder emits 0xfa floats for whole values
+          // >= 2^32; the baseline decoder refused those as non-canonical,
+          // the working tree accepts them like the reference - covered by
+          // isKnownWholeFloatAcceptChange above.
 
           if (index % MUTATION_STRIDE === 0) {
             for (const [mutName, mutated] of mutations(encoded)) {
@@ -211,7 +285,7 @@ describe("differential corpus: baseline vs working tree", () => {
               const curMut = decodeOutcome(current, mutated.slice());
               if (
                 JSON.stringify(baseMut) !== JSON.stringify(curMut) &&
-                !isKnownLengthCodeChange(baseMut, curMut)
+                !isKnownDecodeChange(mutated, baseMut, curMut)
               ) {
                 report(
                   `${name}/${mutName}`,
@@ -245,7 +319,7 @@ describe("differential corpus: baseline vs working tree", () => {
       const bytes = hexToBytes(hex);
       const base = decodeOutcome(baseline, bytes.slice());
       const cur = decodeOutcome(current, bytes.slice());
-      if (JSON.stringify(base) !== JSON.stringify(cur) && !isKnownLengthCodeChange(base, cur)) {
+      if (JSON.stringify(base) !== JSON.stringify(cur) && !isKnownDecodeChange(bytes, base, cur)) {
         failures.push(`${name}: baseline ${outcomeStr(base)} != current ${outcomeStr(cur)}`);
       }
     }

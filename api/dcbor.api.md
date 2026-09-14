@@ -370,6 +370,7 @@ export interface CborTaggedType {
     readonly isCbor: true;
     // (undocumented)
     readonly tag: CborNumber;
+    readonly tagName?: string | undefined;
     // (undocumented)
     readonly type: typeof MajorType.Tagged;
     // (undocumented)
@@ -456,13 +457,19 @@ export const expectNegative: (cbor: Cbor) => number | bigint;
 export const expectNumber: (cbor: Cbor) => CborNumber;
 
 // @public
-export const expectTaggedContent: (cbor: Cbor, tag: number | bigint) => Cbor;
+export const expectTaggedContent: (cbor: Cbor, tag: number | bigint | Tag) => Cbor;
 
 // @public
 export const expectText: (cbor: Cbor) => string;
 
 // @public
-export const expectUnsigned: (cbor: Cbor) => number | bigint;
+export const expectUnsigned: (cbor: Cbor, options?: ExpectUnsignedOptions) => number | bigint;
+
+// @public
+export interface ExpectUnsignedOptions {
+    readonly width: 8 | 16 | 32 | 64;
+    readonly wrapNegative?: boolean | undefined;
+}
 
 // @public
 export const extractCbor: (cbor: Cbor | Uint8Array) => CborNative;
@@ -751,12 +758,13 @@ export class TagsStore implements ReadonlyTagsStore {
     constructor();
     // (undocumented)
     assignedNameForTag(tag: Tag): string | undefined;
+    clone(): TagsStore;
     // (undocumented)
     nameForTag(tag: Tag): string;
     // (undocumented)
     nameForValue(value: CborNumber): string;
     register(tag: Tag): void;
-    registerAll(tags: Tag[]): void;
+    registerAll(tags: Iterable<Tag>): void;
     setSummarizer(tagValue: CborNumber, summarizer: CborSummarizer): void;
     // (undocumented)
     summarizer(tag: CborNumber): CborSummarizer | undefined;

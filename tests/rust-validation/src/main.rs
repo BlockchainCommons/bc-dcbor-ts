@@ -1,55 +1,74 @@
-//! Cross-validates the @blockchaincommons/dcbor golden wire vectors against the Rust
+//! Cross-validates the @blockchaincommons/dcbor golden vectors against the Rust
 //! reference implementation (`dcbor` crate, bc-dcbor-rust).
 //!
-//! Usage: cargo run --release -- <path-to-tests/vectors>
+//! Usage (run both; the reference's `num-bigint` feature changes how tags 2
+//! and 3 are named and which recipes it can materialize):
 //!
-//! Reads `encode-vectors.json` and `decode-vectors.json`, materializes each
-//! recipe with the Rust API, encodes/decodes, and compares against the
-//! committed expectations. Every vector is classified as:
+//!   cargo run --release -- <path-to-tests/vectors>
+//!   cargo run --release --features bignum -- <path-to-tests/vectors>
 //!
-//!   match      - Rust produces exactly the fixture outcome
-//!   emulated   - the recipe describes a JS-side *input guard* (e.g. bigint
-//!                out-of-CBOR-range throwing OutOfRange) that the harness
-//!                re-implements because Rust's typed API makes the input
-//!                inexpressible; the vector validates by construction
-//!   skipped    - JS-only input shape with no Rust analog (Symbol, function,
-//!                malformed bare node)
-//!   expected-divergence - a known, documented TS↔Rust behavioral difference
-//!                (allowlisted by vector name below)
-//!   MISMATCH   - anything else; fails the run
+//! Reads the five fixture files and compares the reference's outcome with the
+//! committed expectation:
+//!
+//!   encode-vectors.json  recipe -> bytes (or a CborError code)
+//!   decode-vectors.json  bytes -> re-encoded bytes, or a code AND message
+//!   format-vectors.json  value + tags store -> diagnostic (plain, annotated,
+//!                        flat, summary) and annotated hex
+//!   date-vectors.json    tag-1 bytes / date recipe -> bytes + Display, or code
+//!   uint-vectors.json    bytes -> u8/u16/u32/u64::try_from
+//!
+//! Every vector is classified as:
+//!
+//!   match            - the reference produces exactly the fixture outcome
+//!   reference-throw  - the reference itself rejects the input
+//!                      (`Date::from_string`), with the fixture's code
+//!   emulated-throw   - a TS guard the harness mirrors because the reference
+//!                      cannot express the input (`cbor(bigint)` outside the
+//!                      CBOR integer range, a negative `biguintToCbor`) or
+//!                      would panic on it (`Date::from_timestamp` on ±Infinity
+//!                      or whole seconds outside chrono's range - probed with
+//!                      chrono's own `timestamp_opt` before the call)
+//!   skipped          - JS-only input shape (Symbol, function, malformed bare
+//!                      node), a tombstoned recipe, a row pinned to the other
+//!                      build, or a bignum recipe in the default build
+//!   expected-divergence - a documented TS<->Rust difference allowlisted by
+//!                      vector name in `expected_divergences()` (empty today)
+//!   MISMATCH         - anything else; fails the run
 //!
 //! Exit code 0 iff there are no MISMATCHes.
 
 use std::collections::BTreeMap;
 use std::process::ExitCode;
 
+use chrono::{LocalResult, TimeZone, Utc};
 use dcbor::prelude::*;
-use dcbor::Simple;
-use num_bigint::{BigInt, BigUint};
+use dcbor::{register_tags_in, DiagFormatOpts, HexFormatOpts, Simple, TagsStoreOpt};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+/// The build this binary was compiled as; format rows may be pinned to one.
+const BUILD: &str = if cfg!(feature = "bignum") { "bignum" } else { "default" };
+
 /// Known, documented TS↔Rust divergences: vector name -> (expected Rust
 /// outcome, reason). Anything diverging outside this list is a MISMATCH.
+///
+/// Empty: every recorded divergence is closed. The mechanism stays so a
+/// future, deliberate divergence is allowlisted by name here and recorded in
+/// RUST_DIVERGENCES.md rather than hidden.
 fn expected_divergences() -> BTreeMap<&'static str, (&'static str, &'static str)> {
-    BTreeMap::from([
-        // TS CborDate.fromTimestamp throws InvalidDate for non-finite input;
-        // Rust from_timestamp saturating-casts (NaN -> epoch 0).
-        (
-            "date/non-finite-throws",
-            ("bytes c100", "TS guards non-finite timestamps; Rust saturates"),
-        ),
-    ])
+    BTreeMap::new()
 }
 
 enum Materialized {
     Value(CBOR),
+    /// The reference rejected the input itself (a real `dcbor::Error`).
+    ReferenceThrow(&'static str),
     /// TS-side input guard reproduced by the harness (see module docs).
     EmulatedThrow(&'static str),
     Skip(&'static str),
 }
 
-use Materialized::{EmulatedThrow, Skip, Value as Mat};
+use Materialized::{EmulatedThrow, ReferenceThrow, Skip, Value as Mat};
 
 fn parse_f64(v: &str) -> f64 {
     match v {
@@ -81,6 +100,21 @@ fn tag_from_str(s: &str) -> u64 {
 
 fn cycle_bytes(start: u64, count: u64) -> Vec<u8> {
     (0..count).map(|i| ((start + i) & 0xff) as u8).collect()
+}
+
+/// `Date::from_timestamp` is `Utc.timestamp_opt(trunc as i64, (fract * 1e9)
+/// as u32).unwrap()`: it panics where chrono has no such instant (±inf
+/// saturate to the i64 bounds; whole seconds outside ±262143 years), and TS
+/// throws InvalidDate there. Probe chrono with the reference's own
+/// arithmetic and emulate the throw. NaN is NOT guarded: `trunc() as i64`
+/// saturates it to 0, the epoch, on both sides.
+fn date_from_timestamp(secs: f64) -> Result<Date, Materialized> {
+    let whole = secs.trunc() as i64;
+    let nsecs = (secs.fract() * 1_000_000_000.0) as u32;
+    if matches!(Utc.timestamp_opt(whole, nsecs), LocalResult::None) {
+        return Err(EmulatedThrow("InvalidDate"));
+    }
+    Ok(Date::from_timestamp(secs))
 }
 
 /// SameValueZero-style dedup key for the jsset emulation (JS Set semantics:
@@ -213,56 +247,49 @@ fn materialize(recipe: &Value) -> Materialized {
                 other => other,
             }
         }
-        // JS {tag, value} sniffing produces exactly to_tagged_value bytes;
-        // the tag recipe is a number (or a string that Number()-coerces).
-        "tagobjlit" => {
-            let tag_recipe = &recipe["tag"];
-            let tag = match tag_recipe["k"].as_str().unwrap() {
-                "n" => parse_f64(tag_recipe["v"].as_str().unwrap()) as u64,
-                "s" => parse_f64(tag_recipe["v"].as_str().unwrap()) as u64,
-                _ => return Skip("tagobjlit with non-numeric tag recipe"),
-            };
-            match materialize(&recipe["content"]) {
-                Mat(c) => Mat(CBOR::to_tagged_value(tag, c)),
-                other => other,
-            }
-        }
-        "date" => {
-            let secs = parse_f64(recipe["seconds"].as_str().unwrap());
-            if !secs.is_finite() {
-                // TS throws InvalidDate; Rust saturates. Materialize the
-                // Rust behavior and let the divergence allowlist judge it.
-                return Mat(Date::from_timestamp(0.0).into());
-            }
-            Mat(Date::from_timestamp(secs).into())
-        }
+        // Tombstoned input shapes (P3.5 `{tag, value}` sniffing, P3.7
+        // `taggedCbor`-only auto-wrap): their fixtures expect a TS directive
+        // error and are skipped before materialization (see run_encode).
+        "tagobjlit" | "taggedproto" => Skip("tombstoned JS-only input shape"),
+        "date" => match date_from_timestamp(parse_f64(recipe["seconds"].as_str().unwrap())) {
+            Ok(d) => Mat(d.into()),
+            Err(m) => m,
+        },
         "datestr" => match Date::from_string(recipe["v"].as_str().unwrap()) {
             Ok(d) => Mat(d.into()),
-            Err(_) => EmulatedThrow("InvalidDate"),
+            Err(_) => ReferenceThrow("InvalidDate"),
         },
         "bytestring" => Mat(CBOR::to_byte_string(
             hex::decode(recipe["hex"].as_str().unwrap()).unwrap(),
         )),
         "biguint" => {
             let v = recipe["v"].as_str().unwrap();
-            if let Some(stripped) = v.strip_prefix('-') {
-                let _ = stripped;
+            if v.starts_with('-') {
                 return EmulatedThrow("OutOfRange"); // TS biguintToCbor(<0)
             }
-            Mat(CBOR::from(v.parse::<BigUint>().unwrap()))
-        }
-        "bignum" => Mat(CBOR::from(
-            recipe["v"].as_str().unwrap().parse::<BigInt>().unwrap(),
-        )),
-        // Protocol wrappers: byte-equivalent to their underlying values.
-        "tocbor" => materialize(&recipe["inner"]),
-        "taggedproto" => {
-            let tag = tag_from_str(recipe["tag"].as_str().unwrap());
-            match materialize(&recipe["inner"]) {
-                Mat(c) => Mat(CBOR::to_tagged_value(tag, c)),
-                other => other,
+            #[cfg(feature = "bignum")]
+            {
+                Mat(CBOR::from(v.parse::<num_bigint::BigUint>().unwrap()))
+            }
+            #[cfg(not(feature = "bignum"))]
+            {
+                Skip("needs num-bigint")
             }
         }
+        "bignum" => {
+            #[cfg(feature = "bignum")]
+            {
+                Mat(CBOR::from(
+                    recipe["v"].as_str().unwrap().parse::<num_bigint::BigInt>().unwrap(),
+                ))
+            }
+            #[cfg(not(feature = "bignum"))]
+            {
+                Skip("needs num-bigint")
+            }
+        }
+        // Protocol wrappers: byte-equivalent to their underlying values.
+        "tocbor" => materialize(&recipe["inner"]),
         // Post-P3.7 dispatch precedence: toCbor() wins over taggedCbor(),
         // so bothproto encodes as the toCbor side's marker array.
         "bothproto" => match materialize(&recipe["inner"]) {
@@ -287,6 +314,9 @@ fn materialize(recipe: &Value) -> Materialized {
         )))
         .into()),
         "rawuint" => Mat(CBORCase::Unsigned(recipe["v"].as_str().unwrap().parse().unwrap()).into()),
+        // Bare Text node: the string is stored verbatim and NFC-normalized by
+        // `cbor_data` at encode time (cbor.rs), exactly like the TS node.
+        "rawtext" => Mat(CBORCase::Text(recipe["v"].as_str().unwrap().to_string()).into()),
         "rawnegmag" => {
             Mat(CBORCase::Negative(recipe["v"].as_str().unwrap().parse().unwrap()).into())
         }
@@ -324,9 +354,16 @@ fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
+#[derive(Clone, Copy)]
+enum ThrowClass {
+    Reference,
+    Emulated,
+}
+
 #[derive(Default)]
 struct Tally {
     matched: usize,
+    reference_throw: usize,
     emulated: usize,
     skipped: usize,
     expected_divergence: usize,
@@ -337,13 +374,47 @@ impl Tally {
     fn mismatch(&mut self, name: &str, detail: String) {
         self.mismatches.push(format!("{name}: {detail}"));
     }
+
+    /// Compare a Rust outcome string with the fixture's, honouring the
+    /// allowlist; `throw_class` says which throw tally a matching throw feeds.
+    fn judge(
+        &mut self,
+        name: &str,
+        rust: &str,
+        ts: &str,
+        throw_class: ThrowClass,
+        divergences: &BTreeMap<&str, (&str, &str)>,
+    ) {
+        if rust == ts {
+            if rust.starts_with("throw") {
+                match throw_class {
+                    ThrowClass::Reference => self.reference_throw += 1,
+                    ThrowClass::Emulated => self.emulated += 1,
+                }
+            } else {
+                self.matched += 1;
+            }
+        } else if let Some((allowed, _why)) = divergences.get(name) {
+            if rust == *allowed {
+                self.expected_divergence += 1;
+            } else {
+                self.mismatch(
+                    name,
+                    format!("divergence allowlisted as '{allowed}' but Rust gave '{rust}'"),
+                );
+            }
+        } else {
+            self.mismatch(name, format!("TS {ts} != Rust {rust}"));
+        }
+    }
 }
 
-/// The Rust-side outcome of a vector, as a comparable string.
-fn outcome_string(m: Materialized) -> Result<String, &'static str> {
+/// The Rust-side outcome of a recipe, as a comparable string.
+fn outcome_string(m: Materialized) -> Result<(String, ThrowClass), &'static str> {
     match m {
-        Mat(c) => Ok(format!("bytes {}", hex::encode(c.to_cbor_data()))),
-        EmulatedThrow(code) => Ok(format!("throw {code}")),
+        Mat(c) => Ok((format!("bytes {}", hex::encode(c.to_cbor_data())), ThrowClass::Reference)),
+        ReferenceThrow(code) => Ok((format!("throw {code}"), ThrowClass::Reference)),
+        EmulatedThrow(code) => Ok((format!("throw {code}"), ThrowClass::Emulated)),
         Skip(reason) => Err(reason),
     }
 }
@@ -362,7 +433,7 @@ fn run_encode(vectors: &[Value], tally: &mut Tally, divergences: &BTreeMap<&str,
             continue;
         }
 
-        let rust_outcome = match outcome_string(materialize(&vector["recipe"])) {
+        let (rust_outcome, throw_class) = match outcome_string(materialize(&vector["recipe"])) {
             Ok(o) => o,
             Err(_reason) => {
                 tally.skipped += 1;
@@ -393,24 +464,7 @@ fn run_encode(vectors: &[Value], tally: &mut Tally, divergences: &BTreeMap<&str,
             format!("throw {}", expect["code"].as_str().unwrap())
         };
 
-        if rust_outcome == ts_outcome {
-            if rust_outcome.starts_with("throw") {
-                tally.emulated += 1; // throws are TS input guards the harness mirrors
-            } else {
-                tally.matched += 1;
-            }
-        } else if let Some((allowed, _why)) = divergences.get(name) {
-            if rust_outcome == *allowed {
-                tally.expected_divergence += 1;
-            } else {
-                tally.mismatch(
-                    name,
-                    format!("divergence allowlisted as '{allowed}' but Rust gave '{rust_outcome}'"),
-                );
-            }
-        } else {
-            tally.mismatch(name, format!("TS {ts_outcome} != Rust {rust_outcome}"));
-        }
+        tally.judge(name, &rust_outcome, &ts_outcome, throw_class, divergences);
     }
 }
 
@@ -422,28 +476,210 @@ fn run_decode(vectors: &[Value], tally: &mut Tally, divergences: &BTreeMap<&str,
 
         let rust_outcome = match CBOR::try_from_data(&bytes) {
             Ok(c) => format!("bytes {}", hex::encode(c.to_cbor_data())),
-            Err(e) => format!("throw {}", error_code(&e)),
+            // Rejections compare by code AND by the error's Display text: the
+            // message is part of the contract the port keeps.
+            Err(e) => format!("throw {} / {}", error_code(&e), e),
         };
         let ts_outcome = if expect["ok"].as_bool().unwrap() {
-            format!("bytes {}", vector["hex"].as_str().unwrap())
+            // An accept fixture may pin a re-encoding that differs from the
+            // input (whole-valued f32/f64 heads decode to integer nodes);
+            // otherwise the accept must round-trip byte-identically.
+            let hex = expect["hex"]
+                .as_str()
+                .unwrap_or_else(|| vector["hex"].as_str().unwrap());
+            format!("bytes {hex}")
         } else {
+            format!(
+                "throw {} / {}",
+                expect["code"].as_str().unwrap(),
+                expect["message"].as_str().unwrap_or("<no message in fixture>")
+            )
+        };
+
+        tally.judge(name, &rust_outcome, &ts_outcome, ThrowClass::Reference, divergences);
+    }
+}
+
+/// The tags store a format row asks for, as the reference's `TagsStoreOpt`.
+fn tags_store_for(config: &str) -> Option<TagsStore> {
+    match config {
+        "none" => None,
+        "standard" | "standard+bignum" => {
+            // `register_tags_in` registers whatever this build supports: the
+            // date tag, plus tags 2/3 under `num-bigint`. Rows are pinned to
+            // the build whose store they describe.
+            let mut store = TagsStore::default();
+            register_tags_in(&mut store);
+            Some(store)
+        }
+        other => panic!("unknown format config: {other}"),
+    }
+}
+
+fn run_format(vectors: &[Value], tally: &mut Tally, divergences: &BTreeMap<&str, (&str, &str)>) {
+    for vector in vectors {
+        let name = vector["name"].as_str().unwrap();
+        if let Some(build) = vector["build"].as_str() {
+            if build != BUILD {
+                tally.skipped += 1;
+                continue;
+            }
+        }
+        let input = &vector["input"];
+        let value = if let Some(h) = input["hex"].as_str() {
+            match CBOR::try_from_data(&hex::decode(h).unwrap()) {
+                Ok(c) => c,
+                Err(e) => {
+                    tally.mismatch(name, format!("input bytes do not decode: {e}"));
+                    continue;
+                }
+            }
+        } else {
+            match materialize(&input["recipe"]) {
+                Mat(c) => c,
+                Skip(_) => {
+                    tally.skipped += 1;
+                    continue;
+                }
+                ReferenceThrow(code) | EmulatedThrow(code) => {
+                    tally.mismatch(name, format!("input recipe throws {code}"));
+                    continue;
+                }
+            }
+        };
+        let store = tags_store_for(vector["config"].as_str().unwrap());
+        let opt = || match &store {
+            None => TagsStoreOpt::None,
+            Some(s) => TagsStoreOpt::Custom(s),
+        };
+        let expect = &vector["expect"];
+        let rendered: [(&str, String); 6] = [
+            ("hex", value.hex()),
+            ("diagnostic", value.diagnostic_opt(&DiagFormatOpts::default().tags(opt()))),
+            (
+                "annotated",
+                value.diagnostic_opt(&DiagFormatOpts::default().annotate(true).tags(opt())),
+            ),
+            ("flat", value.diagnostic_opt(&DiagFormatOpts::default().flat(true).tags(opt()))),
+            (
+                "summary",
+                value.diagnostic_opt(&DiagFormatOpts::default().summarize(true).tags(opt())),
+            ),
+            (
+                "hexAnnotated",
+                value.hex_opt(&HexFormatOpts::default().annotate(true).context(opt())),
+            ),
+        ];
+        let mut rust = String::new();
+        let mut ts = String::new();
+        for (field, actual) in &rendered {
+            let expected = expect[*field].as_str().unwrap_or("<missing>");
+            rust.push_str(&format!("{field}={actual:?}\n"));
+            ts.push_str(&format!("{field}={expected:?}\n"));
+        }
+        tally.judge(name, &rust, &ts, ThrowClass::Reference, divergences);
+    }
+}
+
+/// Whether `Date::from_tagged_cbor` on this value would panic inside
+/// `from_timestamp` (±inf, whole seconds outside chrono's range). Anything
+/// else runs the real decoder, so the real error (WrongType, WrongTag,
+/// OutOfRange) is reported with its message.
+fn date_decode_panics(cbor: &CBOR) -> bool {
+    if let CBORCase::Tagged(tag, item) = cbor.as_case() {
+        if tag.value() == 1 {
+            if let Ok(secs) = f64::try_from(item.clone()) {
+                return date_from_timestamp(secs).is_err();
+            }
+        }
+    }
+    false
+}
+
+fn run_date(vectors: &[Value], tally: &mut Tally, divergences: &BTreeMap<&str, (&str, &str)>) {
+    for vector in vectors {
+        let name = vector["name"].as_str().unwrap();
+        let expect = &vector["expect"];
+        let kind = vector["kind"].as_str().unwrap();
+
+        // Rust outcome: "bytes <hex> display <text>" or "throw <code>[ / <message>]".
+        let (rust_outcome, throw_class) = if kind == "decode" {
+            let bytes = hex::decode(vector["hex"].as_str().unwrap()).unwrap();
+            match CBOR::try_from_data(&bytes) {
+                Err(e) => (format!("throw {} / {}", error_code(&e), e), ThrowClass::Reference),
+                Ok(cbor) if date_decode_panics(&cbor) => {
+                    ("throw InvalidDate".to_string(), ThrowClass::Emulated)
+                }
+                Ok(cbor) => match Date::from_tagged_cbor(cbor) {
+                    Ok(d) => (
+                        format!("bytes {} display {}", hex::encode(d.to_cbor_data()), d),
+                        ThrowClass::Reference,
+                    ),
+                    Err(e) => (format!("throw {} / {}", error_code(&e), e), ThrowClass::Reference),
+                },
+            }
+        } else {
+            let recipe = &vector["recipe"];
+            let date = match recipe["k"].as_str().unwrap() {
+                "date" => date_from_timestamp(parse_f64(recipe["seconds"].as_str().unwrap())),
+                "datestr" => Date::from_string(recipe["v"].as_str().unwrap())
+                    .map_err(|_| ReferenceThrow("InvalidDate")),
+                other => panic!("date display recipe must be date/datestr, got {other}"),
+            };
+            match date {
+                Ok(d) => (
+                    format!("bytes {} display {}", hex::encode(d.to_cbor_data()), d),
+                    ThrowClass::Reference,
+                ),
+                Err(EmulatedThrow(code)) => (format!("throw {code}"), ThrowClass::Emulated),
+                Err(ReferenceThrow(code)) => (format!("throw {code}"), ThrowClass::Reference),
+                Err(_) => unreachable!(),
+            }
+        };
+
+        let ts_outcome = if expect["ok"].as_bool().unwrap() {
+            format!(
+                "bytes {} display {}",
+                expect["hex"].as_str().unwrap(),
+                expect["display"].as_str().unwrap()
+            )
+        } else if let (Some(message), ThrowClass::Reference) =
+            (expect["message"].as_str(), throw_class)
+        {
+            format!("throw {} / {}", expect["code"].as_str().unwrap(), message)
+        } else {
+            // The reference panics here (emulated), or the row pins the code only.
             format!("throw {}", expect["code"].as_str().unwrap())
         };
 
-        if rust_outcome == ts_outcome {
-            tally.matched += 1;
-        } else if let Some((allowed, _why)) = divergences.get(name) {
-            if rust_outcome == *allowed {
-                tally.expected_divergence += 1;
-            } else {
-                tally.mismatch(
-                    name,
-                    format!("divergence allowlisted as '{allowed}' but Rust gave '{rust_outcome}'"),
-                );
-            }
+        tally.judge(name, &rust_outcome, &ts_outcome, throw_class, divergences);
+    }
+}
+
+fn run_uint(vectors: &[Value], tally: &mut Tally, divergences: &BTreeMap<&str, (&str, &str)>) {
+    for vector in vectors {
+        let name = vector["name"].as_str().unwrap();
+        let bytes = hex::decode(vector["hex"].as_str().unwrap()).unwrap();
+        let cbor = CBOR::try_from_data(&bytes).expect("uint vector must decode");
+        let width = vector["width"].as_u64().unwrap();
+        let result: Result<String, dcbor::Error> = match width {
+            8 => u8::try_from(cbor).map(|v| v.to_string()),
+            16 => u16::try_from(cbor).map(|v| v.to_string()),
+            32 => u32::try_from(cbor).map(|v| v.to_string()),
+            64 => u64::try_from(cbor).map(|v| v.to_string()),
+            other => panic!("unsupported width {other}"),
+        };
+        let rust_outcome = match result {
+            Ok(v) => format!("value {v}"),
+            Err(e) => format!("throw {}", error_code(&e)),
+        };
+        let expect = &vector["expect"];
+        let ts_outcome = if expect["ok"].as_bool().unwrap() {
+            format!("value {}", expect["value"].as_str().unwrap())
         } else {
-            tally.mismatch(name, format!("TS {ts_outcome} != Rust {rust_outcome}"));
-        }
+            format!("throw {}", expect["code"].as_str().unwrap())
+        };
+        tally.judge(name, &rust_outcome, &ts_outcome, ThrowClass::Reference, divergences);
     }
 }
 
@@ -466,33 +702,73 @@ fn main() -> ExitCode {
     let divergences = expected_divergences();
     let mut encode_tally = Tally::default();
     let mut decode_tally = Tally::default();
+    let mut format_tally = Tally::default();
+    let mut date_tally = Tally::default();
+    let mut uint_tally = Tally::default();
 
     let encode_vectors = load("encode-vectors.json");
     let decode_vectors = load("decode-vectors.json");
+    let format_vectors = load("format-vectors.json");
+    let date_vectors = load("date-vectors.json");
+    let uint_vectors = load("uint-vectors.json");
     run_encode(&encode_vectors, &mut encode_tally, &divergences);
     run_decode(&decode_vectors, &mut decode_tally, &divergences);
+    run_format(&format_vectors, &mut format_tally, &divergences);
+    run_date(&date_vectors, &mut date_tally, &divergences);
+    run_uint(&uint_vectors, &mut uint_tally, &divergences);
 
+    println!("build: {BUILD}");
     println!(
-        "encode: {} vectors - {} match, {} emulated-throw, {} skipped (JS-only), {} expected-divergence, {} MISMATCH",
+        "encode: {} vectors - {} match, {} reference-throw, {} emulated-throw, {} skipped, {} expected-divergence, {} MISMATCH",
         encode_vectors.len(),
         encode_tally.matched,
+        encode_tally.reference_throw,
         encode_tally.emulated,
         encode_tally.skipped,
         encode_tally.expected_divergence,
         encode_tally.mismatches.len()
     );
     println!(
-        "decode: {} vectors - {} match, {} expected-divergence, {} MISMATCH",
+        "decode: {} vectors - {} match, {} reference-throw, {} expected-divergence, {} MISMATCH",
         decode_vectors.len(),
         decode_tally.matched,
+        decode_tally.reference_throw,
         decode_tally.expected_divergence,
         decode_tally.mismatches.len()
+    );
+    println!(
+        "format: {} vectors - {} match, {} skipped, {} expected-divergence, {} MISMATCH",
+        format_vectors.len(),
+        format_tally.matched,
+        format_tally.skipped,
+        format_tally.expected_divergence,
+        format_tally.mismatches.len()
+    );
+    println!(
+        "date: {} vectors - {} match, {} reference-throw, {} emulated-throw, {} expected-divergence, {} MISMATCH",
+        date_vectors.len(),
+        date_tally.matched,
+        date_tally.reference_throw,
+        date_tally.emulated,
+        date_tally.expected_divergence,
+        date_tally.mismatches.len()
+    );
+    println!(
+        "uint: {} vectors - {} match, {} reference-throw, {} expected-divergence, {} MISMATCH",
+        uint_vectors.len(),
+        uint_tally.matched,
+        uint_tally.reference_throw,
+        uint_tally.expected_divergence,
+        uint_tally.mismatches.len()
     );
 
     let all: Vec<&String> = encode_tally
         .mismatches
         .iter()
         .chain(decode_tally.mismatches.iter())
+        .chain(format_tally.mismatches.iter())
+        .chain(date_tally.mismatches.iter())
+        .chain(uint_tally.mismatches.iter())
         .collect();
     if !all.is_empty() {
         println!("\nMISMATCHES:");
@@ -501,6 +777,6 @@ fn main() -> ExitCode {
         }
         return ExitCode::FAILURE;
     }
-    println!("\nAll vectors validated against dcbor (Rust) {}", "0.25.2");
+    println!("\nAll vectors validated against dcbor (Rust) 0.25.2 ({BUILD} build)");
     ExitCode::SUCCESS
 }

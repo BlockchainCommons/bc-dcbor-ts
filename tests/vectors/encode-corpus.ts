@@ -331,6 +331,15 @@ const strings: EncodeCorpusEntry[] = [
   e("str/control-chars", s("\t\n\r")),
   e("str/lone-surrogate-becomes-replacement", s("\ud800")), // TextEncoder → U+FFFD
   e("str/448-byte-lorem-u16-head", sr("Lorem ipsum dolor sit amet, ", 16)), // 448 chars → 0x79 head
+  // Bare Text nodes bypass cbor(): NFC must still be applied by the ENCODER
+  // (Rust `cbor_data` parity), not only by the constructor.
+  e("rawtext/nfd-e-acute", { k: "rawtext", v: "é" }), // node holds 65cc81, encodes 62c3a9
+  e("rawtext/nfd-in-array", arr({ k: "rawtext", v: "é" })), // 8162c3a9
+  e("rawtext/nfc-passthrough", { k: "rawtext", v: "é" }), // already composed: 62c3a9
+  e("rawtext/ascii-fast-path", { k: "rawtext", v: "plain ascii" }),
+  // Map keys are compared by encoded bytes: an NFD key and its NFC form are
+  // the SAME key, so the second insert replaces the first (a1 62c3a9 02).
+  e("rawtext/map-nfd-then-nfc-key", map([{ k: "rawtext", v: "é" }, n(1)], [s("é"), n(2)])),
 ];
 
 // ---------------------------------------------------------------------------
@@ -517,7 +526,19 @@ const dates: EncodeCorpusEntry[] = [
   e("date/y2038-plus", date(2147483648)),
   e("date/far-future", date(10000000000)),
   e("date/sub-ns-precision-dropped", date(1.0000000001)),
-  e("date/non-finite-throws", date("NaN")),
+  // `from_timestamp` parity: NaN saturates to the epoch (`trunc() as i64`),
+  // ±Infinity is rejected (the reference panics; TS throws InvalidDate).
+  e("date/nan-saturates-to-epoch", date("NaN")), // c100
+  e("date/infinity-throws", date("Infinity")),
+  e("date/negative-infinity-throws", date("-Infinity")),
+  // The range check applies to the truncated whole seconds only, so a
+  // fraction below chrono's MIN still lands on MIN (executed on 0.25.2).
+  e("date/below-min-fraction-truncates", date("-8334601228800.5")), // c13b000007948cf211ff
+  e("date/below-min-fraction-999", date("-8334601228800.999")),
+  e("date/max-plus-fraction", date("8210266876799.5")),
+  e("date/max-plus-one-throws", date("8210266876800")),
+  e("date/min-minus-one-throws", date("-8334601228801")),
+  e("date/nanosecond-fraction-rounds-in-f64", date("1703500245.999999999")), // the f64 is …246
   e("datestr/bare-date", datestr("2023-02-08")),
   e("datestr/rfc3339-utc", datestr("2023-02-08T15:30:45Z")),
   e("datestr/rfc3339-offset", datestr("2023-02-08T15:30:45+05:30")),

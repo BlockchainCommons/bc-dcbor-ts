@@ -7,7 +7,7 @@
  */
 
 import type { Cbor, CborInput } from "../src/cbor";
-import { cbor, encodeCbor, taggedValue } from "../src/cbor";
+import { cbor, encodeCbor, taggedValue, cborEquals } from "../src/cbor";
 import { diagnostic } from "../src/diag";
 import { decodeCbor } from "../src/decode";
 import { ByteString } from "../src/byte-string";
@@ -16,7 +16,16 @@ import { CborSet } from "../src/set";
 import { CborDate } from "../src/date";
 import { Tag } from "../src/tag";
 import { CborError } from "../src/error";
-import { extractCbor, asNumber, asInteger, expectInteger } from "../src/conveniences";
+import {
+  extractCbor,
+  asNumber,
+  asInteger,
+  expectInteger,
+  expectText,
+  expectUnsigned,
+  expectNegative,
+} from "../src/conveniences";
+import { hexAnnotated } from "../src/dump";
 
 /** Helper to convert hex string to Uint8Array */
 function hexToBytes(hex: string): Uint8Array {
@@ -303,6 +312,53 @@ describe("encode tests", () => {
     );
   });
 
+  // DCBOR-02: the node keeps the constructed string; NFC is applied by the
+  // encoder (Rust `CBORCase::Text` + `cbor_data` parity). Every expected
+  // string below was executed on the reference.
+  describe("text nodes keep the constructed string; NFC applies at encode time", () => {
+    const nfd = "e\u0301"; // "é" decomposed: 65 cc 81
+    const nfc = "\u00e9"; // "é" composed:   c3 a9
+
+    test("cbor(string) stores the string verbatim", () => {
+      const c = cbor(nfd);
+      expect(expectText(c)).toBe(nfd);
+      expect(expectText(c)).not.toBe(nfc);
+      expect(bytesToHex(new TextEncoder().encode(expectText(c)))).toBe("65cc81");
+    });
+
+    test("encodeCbor emits the NFC form", () => {
+      expect(bytesToHex(encodeCbor(cbor(nfd)))).toBe("62c3a9");
+      expect(bytesToHex(encodeCbor(cbor(nfc)))).toBe("62c3a9");
+      // U+212B ANGSTROM SIGN is a singleton decomposition to U+00C5.
+      expect(bytesToHex(encodeCbor(cbor("\u212b")))).toBe("62c385");
+      expect(bytesToHex(encodeCbor(cbor("\u00c5")))).toBe("62c385");
+      // A bare Text node (no constructor involved) is normalized too.
+      const bare: CborInput = { isCbor: true, type: 3, value: nfd } as unknown as Cbor;
+      expect(bytesToHex(encodeCbor(bare))).toBe("62c3a9");
+    });
+
+    test("diagnostic and hexAnnotated show the stored string (Rust dump.rs parity)", () => {
+      const c = cbor(nfd);
+      expect(diagnostic(c)).toBe(`"${nfd}"`);
+      expect(hexAnnotated(c)).toBe(`63          # text(3)\n    65cc81  # "${nfd}"`);
+      expect(hexAnnotated(cbor(nfc))).toBe(`62          # text(2)\n    c3a9    # "${nfc}"`);
+    });
+
+    test("map keys compare by encoded bytes, so NFD and NFC are the same key", () => {
+      const m = new CborMap();
+      m.set(nfd, 1);
+      m.set(nfc, 2);
+      expect(m.size).toBe(1);
+      expect(bytesToHex(encodeCbor(m))).toBe("a162c3a902");
+      expect(CborSet.from([nfd, nfc]).size).toBe(1);
+    });
+
+    test("decoding still rejects non-NFC input", () => {
+      expect(() => decodeCbor(hexToBytes("6365cc81"))).toThrow(CborError);
+      expect(decodeCbor(hexToBytes("62c3a9")).value).toBe(nfc);
+    });
+  });
+
   // Test 7: encode_array
   describe("encode_array", () => {
     test("encode empty array", () => {
@@ -535,6 +591,164 @@ describe("encode tests", () => {
       expect(cbor(2 ** 63).toHex()).toBe("1b8000000000000000");
       expect(cbor(2 ** 63).toHex()).toBe(cbor(9223372036854775808n).toHex());
     });
+  });
+
+  // DCBOR-05: float heads are judged by the reference's
+  // `validate_canonical_f16/f32/f64` predicates (saturating `as i32`/`as i64`
+  // casts) and decode to the node `From<f32>`/`From<f64>` builds. Every row
+  // was executed on dcbor 0.25.2.
+  describe("decoding whole-valued f32/f64 heads (Rust validate_canonical_* parity)", () => {
+    const dec = (hex: string) => decodeCbor(hexToBytes(hex));
+
+    test("f32 wholes at or beyond 2^31 are accepted and reduce to integers", () => {
+      const c = dec("fa4f000001"); // 2^31 + 256
+      expect(c.type).toBe(0);
+      expect(expectUnsigned(c)).toBe(2147483904);
+      expect(c.toHex()).toBe("1a80000100");
+      expect(dec("fa4f7fffff").toHex()).toBe("1affffff00"); // 2^32 - 256
+      expect(dec("facf000001").toHex()).toBe("3a80000100"); // -(2^31 + 256) -> -2147483905
+      expect(cborDiagnostic(dec("facf000001"))).toBe("-2147483905");
+    });
+
+    test("negative f32 magnitudes are computed in f32 arithmetic (-1f32 - n)", () => {
+      const c = dec("fadf000000"); // -2^63
+      expect(c.toHex()).toBe("3b8000000000000000");
+      expect(cborDiagnostic(c)).toBe("-9223372036854775809");
+      expect(expectNegative(c)).toBe(-9223372036854775809n);
+      const d = dec("fadb000000"); // -2^55
+      expect(d.toHex()).toBe("3b0080000000000000");
+      expect(cborDiagnostic(d)).toBe("-36028797018963969");
+    });
+
+    test("f32 wholes with no fitting integer stay floats and round-trip", () => {
+      for (const hex of ["fa4f800000", "fa4fc00000", "fa5a000000", "fa5f000000", "fadf800000"]) {
+        const c = dec(hex);
+        expect(c.type).toBe(7);
+        expect(c.toHex()).toBe(hex);
+      }
+      expect(extractCbor(dec("fa4f800000"))).toBe(4294967296);
+    });
+
+    test("f64 wholes beyond the i64 saturation bound are accepted", () => {
+      expect(dec("fb43e0000000000001").toHex()).toBe("1b8000000000000800"); // 2^63 + 2048
+      expect(dec("fbc3e0000000000001").toHex()).toBe("3b80000000000007ff"); // -(2^63 + 2048)
+    });
+
+    test("the exact saturation bounds are still non-canonical", () => {
+      for (const hex of ["fa4f000000", "facf000000", "fb43e0000000000000", "fbc3e0000000000000"]) {
+        let error: unknown;
+        try {
+          dec(hex);
+        } catch (e) {
+          error = e;
+        }
+        expect(CborError.isCborError(error) && error.code, hex).toBe("NonCanonicalNumeric");
+      }
+    });
+
+    test("f16 heads keep the same accept set", () => {
+      expect(dec("f97e00").toHex()).toBe("f97e00"); // canonical NaN
+      expect(dec("f93e00").toHex()).toBe("f93e00"); // 1.5
+      for (const hex of ["f97e01", "f94200", "f98000", "f90000"]) {
+        expect(() => dec(hex), hex).toThrow(CborError);
+      }
+    });
+  });
+
+  // DCBOR-11: `cborEquals` is the reference's `PartialEq for CBOR`, not a
+  // byte comparison. Every row was executed on dcbor 0.25.2 (`==`).
+  describe("cborEquals is structural (Rust PartialEq parity)", () => {
+    const float = (v: number): Cbor =>
+      cbor({ isCbor: true, type: 7, value: { type: "Float", value: v } } as unknown as Cbor);
+
+    test("a whole-valued float node is not the integer it encodes as", () => {
+      expect(encodeCbor(float(2))).toEqual(encodeCbor(cbor(2)));
+      expect(cborEquals(float(2), cbor(2))).toBe(false);
+      expect(cborEquals(float(-0), cbor(0))).toBe(false);
+      expect(cborEquals(float(-1), cbor(-1))).toBe(false);
+      expect(cborEquals(cbor([float(1)]), cbor([1]))).toBe(false);
+    });
+
+    test("floats compare by value, with NaN equal to NaN", () => {
+      expect(cborEquals(float(-0), float(0))).toBe(true);
+      expect(cborEquals(float(NaN), float(NaN))).toBe(true);
+      expect(cborEquals(cbor(1.5), cbor(1.5))).toBe(true);
+      expect(cborEquals(cbor(1.5), cbor(2.5))).toBe(false);
+    });
+
+    test("integers compare by value across number and bigint", () => {
+      expect(cborEquals(cbor(5), cbor(5n))).toBe(true);
+      expect(cborEquals(cbor(-5), cbor(-5n))).toBe(true);
+      expect(cborEquals(cbor(2n ** 63n), cbor(2 ** 63))).toBe(true);
+      expect(cborEquals(cbor(5), cbor(6))).toBe(false);
+      expect(cborEquals(cbor(5), cbor(-5))).toBe(false);
+    });
+
+    test("text compares the stored string, so NFD is not NFC", () => {
+      expect(cborEquals(cbor("e\u0301"), cbor("\u00e9"))).toBe(false);
+      expect(cborEquals(cbor("\u00e9"), cbor("\u00e9"))).toBe(true);
+      expect(cborEquals(cbor("ab"), cbor(new TextEncoder().encode("ab")))).toBe(false);
+    });
+
+    test("byte strings compare bytewise", () => {
+      expect(cborEquals(cbor(new Uint8Array([1, 2])), cbor(new Uint8Array([1, 2])))).toBe(true);
+      expect(cborEquals(cbor(new Uint8Array([1, 2])), cbor(new Uint8Array([1, 2, 3])))).toBe(false);
+    });
+
+    test("tags compare by value only; the carried name is ignored", () => {
+      expect(cborEquals(taggedValue(Tag.from(1, "date"), 0), taggedValue(1, 0))).toBe(true);
+      expect(cborEquals(taggedValue(1, 0), taggedValue(2, 0))).toBe(false);
+      expect(cborEquals(taggedValue(1, 0), taggedValue(1, 1))).toBe(false);
+    });
+
+    test("maps compare entry by entry in canonical order, keys and values structurally", () => {
+      const ab = new CborMap();
+      ab.set("a", 1);
+      ab.set("b", 2);
+      const ba = new CborMap();
+      ba.set("b", 2);
+      ba.set("a", 1);
+      expect(cborEquals(cbor(ab), cbor(ba))).toBe(true);
+      const a = new CborMap();
+      a.set("a", 1);
+      expect(cborEquals(cbor(ab), cbor(a))).toBe(false);
+      const floatKey = new CborMap();
+      floatKey.set(float(1), "x");
+      const intKey = new CborMap();
+      intKey.set(1, "x");
+      expect(encodeCbor(floatKey)).toEqual(encodeCbor(intKey));
+      expect(cborEquals(cbor(floatKey), cbor(intKey))).toBe(false);
+      const nfdKey = new CborMap();
+      nfdKey.set("e\u0301", 1);
+      const nfcKey = new CborMap();
+      nfcKey.set("\u00e9", 1);
+      expect(cborEquals(cbor(nfdKey), cbor(nfcKey))).toBe(false);
+    });
+
+    test("nested structures, decoded vs constructed", () => {
+      const ab = new CborMap();
+      ab.set("a", 1);
+      ab.set("b", 2);
+      const nested = taggedValue(5, [ab, [1, 1.5]]);
+      expect(cborEquals(nested, decodeCbor(encodeCbor(nested)))).toBe(true);
+      expect(cborEquals(nested, taggedValue(5, [ab, [1, 2.5]]))).toBe(false);
+      expect(cborEquals(nested, taggedValue(6, [ab, [1, 1.5]]))).toBe(false);
+    });
+  });
+
+  // DCBOR-12 depth floor: nesting is bounded only by the host stack on both
+  // sides (RUST_DIVERGENCES.md §1.3); 1,000 levels must work everywhere.
+  test("a 1,000-deep array decodes, re-encodes identically and renders", () => {
+    const depth = 1000;
+    const bytes = new Uint8Array(depth + 1);
+    bytes.fill(0x81, 0, depth);
+    bytes[depth] = 0x00;
+    const decoded = decodeCbor(bytes);
+    expect(encodeCbor(decoded)).toEqual(bytes);
+    const flat = diagnostic(decoded, { flat: true });
+    expect(flat).toBe(`${"[".repeat(depth)}0${"]".repeat(depth)}`);
+    // Every level but the innermost `[0]` opens and closes on its own line.
+    expect(diagnostic(decoded).split("\n").length).toBe(2 * depth - 1);
   });
 
   // Test 17: int_coerced_to_float

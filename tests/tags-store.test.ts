@@ -132,6 +132,122 @@ describe("TagsStore", () => {
   });
 });
 
+describe("registerStandardTags registers unconditionally, like insert_all (TAGS-01)", () => {
+  it("moves the standard name back to the standard value", async () => {
+    const { registerStandardTags } = await import("../src/tags");
+    const store = new TagsStore();
+    store.register(Tag.from(1, "date"));
+    store.register(Tag.from(99, "date"));
+    expect(store.tagForName("date")?.value).toBe(99);
+    registerStandardTags(store);
+    expect(store.tagForName("date")?.value).toBe(1);
+    expect(store.nameForValue(99)).toBe("date"); // the by-value entry stays, as in the reference
+    expect(store.nameForValue(1)).toBe("date");
+  });
+  it("does the same for the bignum tags with { bignum: true }", async () => {
+    const { registerStandardTags } = await import("../src/tags");
+    const store = new TagsStore();
+    store.register(Tag.from(2, "positive-bignum"));
+    store.register(Tag.from(98, "positive-bignum"));
+    registerStandardTags(store, { bignum: true });
+    expect(store.tagForName("positive-bignum")?.value).toBe(2);
+    expect(store.tagForName("negative-bignum")?.value).toBe(3);
+  });
+  it("throws Custom for a conflicting name on tag 1 and sets no summarizer", async () => {
+    const { registerStandardTags } = await import("../src/tags");
+    const { CborError } = await import("../src");
+    const store = new TagsStore();
+    store.register(Tag.from(1, "other"));
+    let error: unknown;
+    try {
+      registerStandardTags(store);
+    } catch (e) {
+      error = e;
+    }
+    expect(CborError.isCborError(error) && error.code).toBe("Custom");
+    expect(CborError.isCborError(error) && error.message).toBe(
+      "Attempt to register tag: 1 'other' with different name: 'date'",
+    );
+    expect(store.summarizer(1)).toBeUndefined();
+    expect(store.nameForValue(1)).toBe("other");
+  });
+  it("registerAll accepts a readonly array", () => {
+    const store = new TagsStore();
+    const frozen: readonly Tag[] = Object.freeze([Tag.from(5, "five")]);
+    store.registerAll(frozen);
+    store.registerAll(new Set([Tag.from(6, "six")]));
+    expect(store.nameForValue(5)).toBe("five");
+    expect(store.nameForValue(6)).toBe("six");
+  });
+});
+
+describe("tags are frozen values; the store keeps them by identity (TAGS-02)", () => {
+  it("Tag.from returns a frozen object", () => {
+    expect(Object.isFrozen(Tag.from(1, "date"))).toBe(true);
+    expect(Object.isFrozen(Tag.from(12345))).toBe(true);
+  });
+  it("a mutable literal is copied, so later mutation does not reach the store", () => {
+    const store = new TagsStore();
+    const literal = { value: 7, name: "seven" };
+    store.register(literal);
+    literal.name = "changed";
+    expect(store.nameForValue(7)).toBe("seven");
+    expect(store.tagForName("seven")?.value).toBe(7);
+    expect(Object.isFrozen(store.tagForValue(7))).toBe(true);
+  });
+  it("a frozen caller tag is stored by identity", async () => {
+    const { registerStandardTags } = await import("../src/tags");
+    const store = new TagsStore();
+    const eight = Tag.from(8, "eight");
+    store.register(eight);
+    expect(store.tagForValue(8)).toBe(eight);
+    expect(store.tagForName("eight")).toBe(eight);
+    registerStandardTags(store);
+    expect(Object.isFrozen(store.tagForValue(1))).toBe(true);
+  });
+});
+
+describe("TagsStore.clone mirrors #[derive(Clone)] (DCBOR-15)", () => {
+  it("answers every lookup like the original and shares frozen tags and summarizers", () => {
+    const store = new TagsStore();
+    const answer = Tag.from(42, "answer");
+    store.register(answer);
+    const summarizer = () => ({ ok: true as const, value: "summary" });
+    store.setSummarizer(42, summarizer);
+    const copy = store.clone();
+    expect(copy).toBeInstanceOf(TagsStore);
+    expect(copy).not.toBe(store);
+    expect(copy.tagForValue(42)).toBe(answer);
+    expect(copy.tagForName("answer")).toBe(answer);
+    expect(copy.nameForValue(42)).toBe("answer");
+    expect(copy.summarizer(42)).toBe(summarizer);
+  });
+  it("registrations and summarizers set on one store do not reach the other", () => {
+    const store = new TagsStore();
+    store.register(Tag.from(1, "one"));
+    const copy = store.clone();
+    copy.register(Tag.from(2, "two"));
+    copy.setSummarizer(2, () => ({ ok: true as const, value: "two" }));
+    store.register(Tag.from(3, "three"));
+    expect(store.tagForValue(2)).toBeUndefined();
+    expect(store.summarizer(2)).toBeUndefined();
+    expect(copy.tagForValue(3)).toBeUndefined();
+    expect(copy.nameForValue(1)).toBe("one");
+  });
+});
+
+describe("one global tags store per process (TAGS-03)", () => {
+  it("lives on globalThis under the registered symbol", async () => {
+    const { getGlobalTagsStore } = await import("../src");
+    const slot = globalThis as { [k: symbol]: unknown };
+    const key = Symbol.for("@blockchaincommons/dcbor/global-tags-store@1");
+    const store = getGlobalTagsStore();
+    expect(slot[key]).toBe(store);
+    expect(getGlobalTagsStore()).toBe(getGlobalTagsStore());
+    expect(getGlobalTagsStore().clone()).not.toBe(getGlobalTagsStore());
+  });
+});
+
 describe("registerStandardTags: the bignum tags are opt-in (review N3)", () => {
   it("names only the date tag by default, as the reference without num-bigint", async () => {
     const { registerStandardTags, TAG_DATE, TAG_POSITIVE_BIGNUM, TAG_NEGATIVE_BIGNUM } =

@@ -15,16 +15,17 @@
 export const flanked = (s: string, left: string, right: string): string => left + s + right;
 
 /**
- * Check if a character is printable. Internal helper for {@link sanitized}.
+ * Check if a code point is printable (the reference's `is_printable`: any
+ * non-ASCII character, or ASCII 32-126). Internal helper for
+ * {@link sanitized}, which iterates code points, so an astral character (two
+ * UTF-16 code units) is one printable character here.
  *
- * @param c - Character to check
+ * @param c - One code point, as a string
  * @returns True if printable
  */
 const isPrintable = (c: string): boolean => {
-  if (c.length !== 1) return false;
-  const code = c.charCodeAt(0);
-  // Non-ASCII or ASCII printable (32-126)
-  return code > 127 || (code >= 32 && code <= 126);
+  const cp = c.codePointAt(0) ?? 0;
+  return cp > 127 || (cp >= 32 && cp <= 126);
 };
 
 /**

@@ -136,6 +136,14 @@ export interface CborTaggedType {
   readonly isCbor: true;
   readonly type: typeof MajorType.Tagged;
   readonly tag: CborNumber;
+  /**
+   * The name the tag was built with, when {@link taggedValue} received a
+   * named `Tag`. Never on the wire and never consulted by encoding, equality,
+   * `diagnostic` or `hexAnnotated` (those ask the tags store); it only
+   * surfaces in a `WrongTag` error's "but got …" text, as the reference's
+   * `Tag` carried through `CBORCase::Tagged` does. Decoded nodes have none.
+   */
+  readonly tagName?: string | undefined;
   readonly value: Cbor;
 }
 export interface CborSimpleType {

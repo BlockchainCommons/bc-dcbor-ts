@@ -24,10 +24,25 @@ import { fileURLToPath } from "node:url";
 
 import * as src from "../src";
 import {
+  cbor,
+  type CborInput,
+  CborDate,
+  decodeCbor,
+  encodeCbor,
+  expectUnsigned,
+  registerStandardTags,
+  TagsStore,
+} from "../src";
+import { diagnostic } from "../src/diag";
+import { hexAnnotated } from "../src/dump";
+import {
   redesignedAdapterFor,
+  bytesToHex,
+  decodeErrorMessage,
   decodeOutcome,
   encodeOutcome,
   hexToBytes,
+  materialize,
   type Recipe,
 } from "./vectors/recipes";
 
@@ -46,8 +61,36 @@ interface EncodeFixture {
 interface DecodeFixture {
   name: string;
   hex: string;
-  expect: { ok: true } | { ok: false; code: string };
+  expect: { ok: true; hex?: string } | { ok: false; code: string; message: string };
   note: string;
+}
+
+interface FormatFixture {
+  name: string;
+  input: { recipe: Recipe } | { hex: string };
+  config: "none" | "standard" | "standard+bignum";
+  build?: "default" | "bignum";
+  expect: {
+    hex: string;
+    diagnostic: string;
+    annotated: string;
+    flat: string;
+    summary: string;
+    hexAnnotated: string;
+  };
+}
+
+type DateFixture = { name: string; expect: DateExpect } & (
+  { kind: "decode"; hex: string } | { kind: "display"; recipe: Recipe }
+);
+type DateExpect =
+  { ok: true; hex: string; display: string } | { ok: false; code: string; message?: string };
+
+interface UintFixture {
+  name: string;
+  hex: string;
+  width: 8 | 16 | 32 | 64;
+  expect: { ok: true; value: string } | { ok: false; code: string };
 }
 
 /**
@@ -68,6 +111,10 @@ const { count: encodeCount, vectors: encodeVectors } =
   loadFixtures<EncodeFixture>("encode-vectors.json");
 const { count: decodeCount, vectors: decodeVectors } =
   loadFixtures<DecodeFixture>("decode-vectors.json");
+const { count: formatCount, vectors: formatVectors } =
+  loadFixtures<FormatFixture>("format-vectors.json");
+const { count: dateCount, vectors: dateVectors } = loadFixtures<DateFixture>("date-vectors.json");
+const { count: uintCount, vectors: uintVectors } = loadFixtures<UintFixture>("uint-vectors.json");
 
 const api = redesignedAdapterFor(src);
 
@@ -103,8 +150,8 @@ describe("golden encode vectors (frozen wire format)", () => {
         expect(outcome.hex).toBe(vector.expect.hex);
       }
       // Determinism lock: encoder output decodes and re-encodes
-      // byte-identically - except the pinned bare-Float quirk vectors whose
-      // output the decoder rejects as non-canonical (frozen behavior).
+      // byte-identically - unless a fixture deliberately pins a decoder
+      // rejection of the encoder's own output (none do at present).
       const back = decodeOutcome(api, hexToBytes(outcome.hex));
       if (vector.expect.decodeRejects !== undefined) {
         expect(back).toEqual({ ok: false, stage: "decode", code: vector.expect.decodeRejects });
@@ -130,14 +177,114 @@ describe("golden decode vectors (accept/reject + error codes)", () => {
     it(vector.name, () => {
       const outcome = decodeOutcome(api, hexToBytes(vector.hex));
       if (vector.expect.ok) {
-        // Accepts must re-encode to the exact input bytes.
-        expect(outcome).toEqual({ ok: true, hex: vector.hex });
+        // Accepts re-encode to the exact input bytes, unless the fixture pins
+        // the re-encoding of the decoded node (whole-valued float heads that
+        // reduce to integers, as in the reference).
+        expect(outcome).toEqual({ ok: true, hex: vector.expect.hex ?? vector.hex });
       } else {
         // All fixture rejections are decode-stage rejections by construction
         // (the generator verifies this); `stage` distinguishes them from
         // decode-accepted-but-reencode-threw, which would be a divergence.
         expect(outcome).toEqual({ ok: false, stage: "decode", code: vector.expect.code });
+        // The message is the reference's error Display text (the Rust
+        // harness compares it); pin it here so it cannot drift.
+        expect(decodeErrorMessage(api, hexToBytes(vector.hex))).toBe(vector.expect.message);
       }
+    });
+  }
+});
+
+describe("golden format vectors (diagnostic and annotated hex, per tags store)", () => {
+  it("fixture file is self-consistent and in sync with the corpus", async () => {
+    expect(formatVectors.length).toBe(formatCount);
+    const { formatCorpus } = await import("./vectors/format-corpus");
+    expect(formatVectors.map((v) => v.name)).toEqual(formatCorpus.map((c) => c.name));
+  });
+
+  const storeFor = (config: FormatFixture["config"]): TagsStore => {
+    const store = new TagsStore();
+    if (config === "standard") registerStandardTags(store);
+    if (config === "standard+bignum") registerStandardTags(store, { bignum: true });
+    return store;
+  };
+
+  for (const vector of formatVectors) {
+    it(vector.name, () => {
+      const value =
+        "hex" in vector.input
+          ? decodeCbor(hexToBytes(vector.input.hex))
+          : cbor(materialize(vector.input.recipe, api) as CborInput);
+      const store = storeFor(vector.config);
+      const tags = vector.config === "none" ? "none" : store;
+      expect({
+        hex: bytesToHex(encodeCbor(value)),
+        diagnostic: diagnostic(value, { tags }),
+        annotated: diagnostic(value, { annotate: true, tags }),
+        flat: diagnostic(value, { flat: true, tags }),
+        summary: diagnostic(value, { summarize: true, tags }),
+        hexAnnotated: hexAnnotated(value, { tagsStore: store }),
+      }).toEqual(vector.expect);
+    });
+  }
+});
+
+describe("golden date vectors (CborDate decode and display)", () => {
+  it("fixture file is self-consistent and in sync with the corpus", async () => {
+    expect(dateVectors.length).toBe(dateCount);
+    const { dateCorpus } = await import("./vectors/date-corpus");
+    expect(dateVectors.map((v) => v.name)).toEqual(dateCorpus.map((c) => c.name));
+  });
+
+  const outcome = (build: () => CborDate): DateExpect => {
+    try {
+      const date = build();
+      return { ok: true, hex: bytesToHex(encodeCbor(date.toCbor())), display: date.toString() };
+    } catch (e) {
+      const code = api.errorCode(e);
+      if (code === undefined) throw e;
+      return { ok: false, code, message: (e as Error).message };
+    }
+  };
+
+  for (const vector of dateVectors) {
+    it(vector.name, () => {
+      const actual =
+        vector.kind === "decode"
+          ? outcome(() => CborDate.fromTaggedCbor(decodeCbor(hexToBytes(vector.hex))))
+          : outcome(() => materialize(vector.recipe, api) as CborDate);
+      if (vector.expect.ok || vector.expect.message !== undefined) {
+        expect(actual).toEqual(vector.expect);
+      } else {
+        // Display rows pin the code only.
+        expect(actual.ok).toBe(false);
+        expect(!actual.ok && actual.code).toBe(vector.expect.code);
+      }
+    });
+  }
+});
+
+describe("golden unsigned-extraction vectors (expectUnsigned with width and wrapNegative)", () => {
+  it("fixture file is self-consistent and in sync with the corpus", async () => {
+    expect(uintVectors.length).toBe(uintCount);
+    const { uintCorpus } = await import("./vectors/uint-corpus");
+    expect(uintVectors.map((v) => v.name)).toEqual(uintCorpus.map((c) => c.name));
+  });
+
+  for (const vector of uintVectors) {
+    it(vector.name, () => {
+      let actual: UintFixture["expect"];
+      try {
+        const value = expectUnsigned(decodeCbor(hexToBytes(vector.hex)), {
+          width: vector.width,
+          wrapNegative: true,
+        });
+        actual = { ok: true, value: String(value) };
+      } catch (e) {
+        const code = api.errorCode(e);
+        if (code === undefined) throw e;
+        actual = { ok: false, code };
+      }
+      expect(actual).toEqual(vector.expect);
     });
   }
 });

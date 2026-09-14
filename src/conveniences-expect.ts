@@ -9,8 +9,9 @@ import { type Cbor } from "./cbor";
 import { MajorType, type CborNumber } from "./cbor-types";
 import type { CborMap } from "./map";
 import { isFloat as isSimpleFloat } from "./simple";
-import { tagValuesEqual } from "./tag";
+import { Tag, tagValuesEqual } from "./tag";
 import { CborError } from "./error";
+import { narrowInteger } from "./numeric";
 import {
   asUnsigned,
   asNegative,
@@ -25,18 +26,61 @@ import {
 } from "./conveniences-accessors";
 
 /**
+ * Options for {@link expectUnsigned}: extract into a fixed-width unsigned
+ * integer the way the reference's `u8`/`u16`/`u32`/`u64: TryFrom<CBOR>`
+ * do (dcbor 0.25.2 `int.rs`).
+ */
+export interface ExpectUnsignedOptions {
+  /** Target width in bits; an unsigned value above 2^width − 1 is `OutOfRange`. */
+  readonly width: 8 | 16 | 32 | 64;
+  /**
+   * Also accept a negative integer node and wrap it as the reference does:
+   * a value `v` in [−2^width, −1] yields `2^width + v` (so −1 is 255 at
+   * width 8), and a value below −2^width is `OutOfRange`. Off by default:
+   * without it a negative node is `WrongType`, as for every other type. See
+   * RUST_DIVERGENCES.md §1.6.
+   */
+  readonly wrapNegative?: boolean | undefined;
+}
+
+/**
  * Extract unsigned integer value, throwing if type doesn't match.
  *
+ * With `options`, the value is checked against a fixed width and, when
+ * `wrapNegative` is set, a negative node is wrapped exactly as the
+ * reference's `u*::try_from` wraps it (see {@link ExpectUnsignedOptions}).
+ *
  * @param cbor - CBOR value
- * @returns Unsigned integer
- * @throws {CborError} With type 'WrongType' if cbor is not an unsigned integer
+ * @param options - Fixed-width extraction (optional; without it the
+ *   behaviour is the plain `Unsigned`-or-`WrongType` check)
+ * @returns Unsigned integer (`bigint` above `Number.MAX_SAFE_INTEGER`)
+ * @throws {CborError} `WrongType` if cbor is not an unsigned integer (or,
+ *   with `wrapNegative`, not an integer); `OutOfRange` when the value does
+ *   not fit `width`
  */
-export const expectUnsigned = (cbor: Cbor): number | bigint => {
-  const value = asUnsigned(cbor);
-  if (value === undefined) {
-    throw CborError.wrongType();
+export const expectUnsigned = (cbor: Cbor, options?: ExpectUnsignedOptions): number | bigint => {
+  if (options === undefined) {
+    const value = asUnsigned(cbor);
+    if (value === undefined) {
+      throw CborError.wrongType();
+    }
+    return value;
   }
-  return value;
+  // `From64::from_u64(n, MAX)`: the magnitude on the wire must fit the width.
+  const max = (1n << BigInt(options.width)) - 1n;
+  if (cbor.type === MajorType.Unsigned) {
+    const value = BigInt(cbor.value);
+    if (value > max) throw CborError.outOfRange();
+    return narrowInteger(value);
+  }
+  if (cbor.type === MajorType.Negative && options.wrapNegative === true) {
+    // The node stores the magnitude m = −1 − v; the reference computes
+    // `(-1 - m) as uN`, i.e. 2^width + v = max − m, after the same range check.
+    const magnitude = BigInt(cbor.value);
+    if (magnitude > max) throw CborError.outOfRange();
+    return narrowInteger(max - magnitude);
+  }
+  throw CborError.wrongType();
 };
 
 /**
@@ -189,21 +233,25 @@ export const expectNumber = (cbor: Cbor): CborNumber => {
 };
 
 /**
- * Extract content if has specific tag, throwing if not.
+ * Extract content if has specific tag, throwing if not (the reference's
+ * `try_into_expected_tagged_value`).
  *
  * Throws `{ type: "WrongType" }` if `cbor` is not tagged at all, otherwise
- * `{ type: "WrongTag", expected, actual }` if the tag doesn't match.
+ * `{ type: "WrongTag", expected, actual }` if the tag doesn't match. The
+ * error names the expected tag as it was given (a `Tag` keeps its name; a
+ * number or bigint stays unnamed) and the actual tag as the node carries it.
  *
  * @param cbor - CBOR value
- * @param tag - Expected tag value
+ * @param tag - Expected tag value, or a `Tag`
  * @returns Tagged content
  */
-export const expectTaggedContent = (cbor: Cbor, tag: number | bigint): Cbor => {
+export const expectTaggedContent = (cbor: Cbor, tag: number | bigint | Tag): Cbor => {
   if (cbor.type !== MajorType.Tagged) {
     throw CborError.wrongType();
   }
-  if (!tagValuesEqual(cbor.tag, tag)) {
-    throw CborError.wrongTag({ value: tag }, { value: cbor.tag });
+  const expected = typeof tag === "object" ? tag : Tag.from(tag);
+  if (!tagValuesEqual(cbor.tag, expected.value)) {
+    throw CborError.wrongTag(expected, Tag.from(cbor.tag, cbor.tagName));
   }
   return cbor.value;
 };

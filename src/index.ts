@@ -174,6 +174,7 @@ export {
 // Convenience utilities - expectations (`expect*` = `T` or throw CborError)
 export {
   expectUnsigned,
+  type ExpectUnsignedOptions,
   expectNegative,
   expectInteger,
   expectBytes,

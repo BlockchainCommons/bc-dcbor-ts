@@ -249,6 +249,58 @@ describe("CborError", () => {
       expect(() => decodeCbor(new Uint8Array([0x61, 0xff]))).toThrow(CborError);
     });
 
+    // DCBOR-03: the message is the reference's `Utf8Error` Display, computed
+    // from the bytes, not the host decoder's text. Every row was executed on
+    // dcbor 0.25.2 (`CBOR::try_from_data(..).unwrap_err().to_string()`).
+    test("InvalidUtf8 messages mirror core::str::Utf8Error", () => {
+      const invalid = (n: number, i: number) =>
+        `invalid utf-8 sequence of ${n} bytes from index ${i}`;
+      const incomplete = (i: number) => `incomplete utf-8 byte sequence from index ${i}`;
+      const rows: [string, string][] = [
+        ["62c328", invalid(1, 0)],
+        ["62c080", invalid(1, 0)],
+        ["63eda080", invalid(1, 0)],
+        ["61c3", incomplete(0)],
+        ["64f4908080", invalid(1, 0)],
+        ["61ff", invalid(1, 0)],
+        ["8162c328", invalid(1, 0)],
+        ["c162c328", invalid(1, 0)],
+        ["63e28228", invalid(2, 0)],
+        ["64f09f9841", invalid(3, 0)],
+        ["63e0a041", invalid(2, 0)],
+        ["62f0a0", incomplete(0)],
+        ["6441c3a9ff", invalid(1, 3)],
+        ["64616263ff", invalid(1, 3)],
+        ["62eda0", invalid(1, 0)], // a present bad byte beats end of input
+        ["62c0af", invalid(1, 0)],
+        ["61e0", incomplete(0)],
+        ["62e0a0", incomplete(0)],
+        ["63f0908f", incomplete(0)],
+        ["62f480", incomplete(0)],
+        ["61f5", invalid(1, 0)],
+        ["61c2", incomplete(0)],
+        ["6180", invalid(1, 0)], // a lone continuation byte
+        ["6461626380", invalid(1, 3)],
+      ];
+      for (const [hex, suffix] of rows) {
+        let error: unknown;
+        try {
+          decodeCbor(hexToBytes(hex));
+        } catch (e) {
+          error = e;
+        }
+        expect(CborError.isCborError(error) && error.code, hex).toBe("InvalidUtf8");
+        expect(CborError.isCborError(error) && error.message, hex).toBe(
+          `invalid UTF\u20118 string: ${suffix}`,
+        );
+        expect(CborError.isCborError(error) && error.details.cause, hex).toBe(suffix);
+      }
+      expect(decodeCbor(hexToBytes("65e282acc380")).value).toBe("€À");
+      // Noncharacters and the last code point are valid UTF-8 (as in Rust).
+      expect(decodeCbor(hexToBytes("63efbfbe")).toHex()).toBe("63efbfbe");
+      expect(decodeCbor(hexToBytes("64f48fbfbf")).toHex()).toBe("64f48fbfbf");
+    });
+
     test("accepts valid UTF-8 (incl. multibyte) text strings", () => {
       const ok = new Uint8Array([0x62, 0xc3, 0xa9]); // "é" NFC
       const c = decodeCbor(ok);

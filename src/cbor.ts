@@ -18,12 +18,13 @@
  */
 
 import { CborMap } from "./map";
-import { simpleCborData } from "./simple";
+import { simpleCborData, simpleEquals } from "./simple";
 import { hasFractionalPart } from "./float";
 import { encodeVarInt, writeVarInt } from "./varint";
 import { BufWriter } from "./buf-writer";
 import { bytesToHex } from "./hex";
-import { type Tag } from "./tag";
+import { areBytesEqual } from "./stdlib";
+import { type Tag, tagValuesEqual } from "./tag";
 import { CborError } from "./error";
 import { U64_MAX, CBOR_INT_MIN, CBOR_INT_MAX } from "./numeric";
 import {
@@ -183,21 +184,63 @@ const CBOR_NULL = attachMethods({
 // ============================================================================
 
 /**
- * Structural CBOR value equality.
+ * Structural CBOR value equality, the reference's `PartialEq for CBOR`
+ * (`cbor.rs`): two values are equal when they have the same major type and
+ * equal contents, compared recursively.
  *
- * dCBOR encoding is deterministic, so two CBOR values are equal iff they
- * encode to the same byte sequence - this is the simplest correct comparator.
+ * This is NOT "encode to the same bytes": a float node whose value is whole
+ * (`Float(2.0)`, reachable through a bare node) encodes as the integer `2`
+ * but is not equal to the integer node; a text node keeps the string it was
+ * built from, so a decomposed `"é"` is not equal to the composed one although
+ * both encode composed. Integers compare by value across `number`/`bigint`;
+ * tags compare by value only (the carried name is ignored); NaN equals NaN;
+ * maps compare entry by entry in canonical key order, keys and values both
+ * structurally.
  *
  * Use this rather than `===` (which compares JS object references) when
  * you need value equality across two `Cbor` instances built independently.
  */
 export const cborEquals = (a: Cbor, b: Cbor): boolean => {
   if (a === b) return true;
-  const aBytes = encodeCbor(a);
-  const bBytes = encodeCbor(b);
-  if (aBytes.length !== bBytes.length) return false;
-  for (let i = 0; i < aBytes.length; i++) {
-    if (aBytes[i] !== bBytes[i]) return false;
+  switch (a.type) {
+    case MajorType.Unsigned:
+      return b.type === MajorType.Unsigned && BigInt(a.value) === BigInt(b.value);
+    case MajorType.Negative:
+      return b.type === MajorType.Negative && BigInt(a.value) === BigInt(b.value);
+    case MajorType.ByteString:
+      return b.type === MajorType.ByteString && areBytesEqual(a.value, b.value);
+    case MajorType.Text:
+      return b.type === MajorType.Text && a.value === b.value;
+    case MajorType.Array:
+      return (
+        b.type === MajorType.Array &&
+        a.value.length === b.value.length &&
+        a.value.every((item, i) => cborEquals(item, b.value[i]))
+      );
+    case MajorType.Map:
+      return b.type === MajorType.Map && mapEquals(a.value, b.value);
+    case MajorType.Tagged:
+      return (
+        b.type === MajorType.Tagged && tagValuesEqual(a.tag, b.tag) && cborEquals(a.value, b.value)
+      );
+    case MajorType.Simple:
+      return b.type === MajorType.Simple && simpleEquals(a.value, b.value);
+  }
+};
+
+/**
+ * `PartialEq for Map` (`map.rs`): the same entries in canonical key order,
+ * each with a structurally equal stored key node and value node. Both maps
+ * iterate in encoded-key order, so a lockstep walk is exact.
+ */
+const mapEquals = (a: CborMap, b: CborMap): boolean => {
+  if (a.size !== b.size) return false;
+  const left = a.entriesArray;
+  const right = b.entriesArray;
+  for (let i = 0; i < left.length; i++) {
+    const l = left[i];
+    const r = right[i];
+    if (!cborEquals(l.key, r.key) || !cborEquals(l.value, r.value)) return false;
   }
   return true;
 };
@@ -235,7 +278,7 @@ const hasToCbor = (value: unknown): value is ToCbor => {
  * @example
  * ```typescript
  * cbor(42);                          // integer
- * cbor("héllo");                     // NFC-normalized text
+ * cbor("héllo");                     // text (NFC-normalized when encoded)
  * cbor([1, "two", true, null]);      // array
  * cbor(new Map([["k", 1]]));         // map (canonical key order)
  * cbor({ name: "Alice", age: 30 });  // plain object -> map
@@ -309,10 +352,10 @@ export const cbor = (value: CborInput): Cbor => {
       result = { isCbor: true, type: MajorType.Unsigned, value: value };
     }
   } else if (typeof value === "string") {
-    // dCBOR requires all text strings to be in Unicode Normalization Form C (NFC)
-    // This ensures deterministic encoding regardless of how the string was composed
-    const normalized = value.normalize("NFC");
-    result = { isCbor: true, type: MajorType.Text, value: normalized };
+    // The node keeps the string exactly as given (the reference's
+    // `CBORCase::Text(String)` does the same); dCBOR's NFC requirement is
+    // applied when the node is encoded, see `writeCborInto`.
+    result = { isCbor: true, type: MajorType.Text, value };
   } else if (value === null || value === undefined) {
     return CBOR_NULL;
   } else if (value === true) {
@@ -385,6 +428,22 @@ export const cbor = (value: CborInput): Cbor => {
 const textEncoder = new TextEncoder();
 
 /**
+ * dCBOR requires every encoded text string to be in Unicode Normalization
+ * Form C. Like the reference (`cbor.rs`: `x.nfc().collect()` inside
+ * `cbor_data`), normalization happens here at encode time, so the node keeps
+ * the string it was built from. Strings whose code units are all below U+0300
+ * (the first combining mark) contain nothing that can compose or decompose
+ * and are already NFC; skipping `normalize` for them keeps the ASCII/Latin-1
+ * hot path allocation-free.
+ */
+const toNfc = (text: string): string => {
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) >= 0x300) return text.normalize("NFC");
+  }
+  return text;
+};
+
+/**
  * Write a CBOR value into `writer`. The whole tree encodes into one growable
  * buffer, so nested containers don't allocate-and-concatenate a fresh array
  * per level.
@@ -408,7 +467,7 @@ const writeCborInto = (writer: BufWriter, value: CborInput): void => {
       break;
     case MajorType.Text:
       if (typeof c.value === "string") {
-        const utf8Bytes = textEncoder.encode(c.value);
+        const utf8Bytes = textEncoder.encode(toNfc(c.value));
         writeVarInt(writer, utf8Bytes.length, MajorType.Text);
         writer.writeBytes(utf8Bytes);
         return;
@@ -491,17 +550,30 @@ export const encodeCbor = (value: CborInput): Uint8Array<ArrayBuffer> => {
  * taggedValue(Tag.from(32), "https://example.com/"); // URI, tag 32
  * ```
  *
- * @param tag - The tag number (`number | bigint`) or a `Tag` object (its
- *   `.value` is used; names never reach the wire).
+ * @param tag - The tag number (`number | bigint`) or a `Tag` object. Its
+ *   `.value` goes on the wire; a `.name` is kept on the node (see
+ *   `CborTaggedType.tagName`) so a `WrongTag` error can name the tag that
+ *   was found, as the reference does.
  * @param content - Anything `cbor()` accepts.
  * @public
  */
 export const taggedValue = (tag: CborNumber | Tag, content: CborInput): Cbor => {
-  const tagVal = typeof tag === "object" && "value" in tag ? tag.value : tag;
-  return attachMethods({
-    isCbor: true,
-    type: MajorType.Tagged,
-    tag: tagVal,
-    value: cbor(content),
-  });
+  if (typeof tag === "object" && "value" in tag) {
+    if (tag.name !== undefined) {
+      return attachMethods({
+        isCbor: true,
+        type: MajorType.Tagged,
+        tag: tag.value,
+        tagName: tag.name,
+        value: cbor(content),
+      });
+    }
+    return attachMethods({
+      isCbor: true,
+      type: MajorType.Tagged,
+      tag: tag.value,
+      value: cbor(content),
+    });
+  }
+  return attachMethods({ isCbor: true, type: MajorType.Tagged, tag, value: cbor(content) });
 };

@@ -168,9 +168,11 @@ export const TAG_NAME_DATE = "date";
  * Register the standard tags (date, bignums) and their summarizers into
  * `store`.
  *
- * Idempotent: tags already registered under the same name are skipped;
- * registering a value under a DIFFERENT name still throws via the store's
- * conflict validation.
+ * Re-registering is idempotent and moves each standard name back to its
+ * standard value, as the reference's `insert_all` does: a store that had
+ * named tag 99 `date` names tag 1 `date` afterwards. Registering tag 1 (or
+ * 2/3 with `bignum`) under a different name throws `CborError` `Custom`
+ * from the store's conflict validation, before any summarizer is set.
  *
  * @param store - Target store; defaults to the global tags store.
  */
@@ -192,10 +194,7 @@ export const registerStandardTags = (
 ): void => {
   const bignum = options.bignum ?? false;
   const tagsStore = store;
-  const dateTag = Tag.from(TAG_DATE, TAG_NAME_DATE);
-  if (tagsStore.tagForValue(TAG_DATE)?.name !== TAG_NAME_DATE) {
-    tagsStore.register(dateTag);
-  }
+  tagsStore.registerAll([Tag.from(TAG_DATE, TAG_NAME_DATE)]);
 
   // Set summarizer for date tag
   tagsStore.setSummarizer(TAG_DATE, (untaggedCbor: Cbor, _flat: boolean): SummarizerResult => {
@@ -210,13 +209,10 @@ export const registerStandardTags = (
   if (!bignum) return;
 
   // Register bignum tags (the reference's `num-bigint` build).
-  const biguintTag = Tag.from(TAG_POSITIVE_BIGNUM, TAG_NAME_POSITIVE_BIGNUM);
-  const bigintTag = Tag.from(TAG_NEGATIVE_BIGNUM, TAG_NAME_NEGATIVE_BIGNUM);
-  for (const tag of [biguintTag, bigintTag]) {
-    if (tagsStore.tagForValue(tag.value)?.name !== tag.name) {
-      tagsStore.register(tag);
-    }
-  }
+  tagsStore.registerAll([
+    Tag.from(TAG_POSITIVE_BIGNUM, TAG_NAME_POSITIVE_BIGNUM),
+    Tag.from(TAG_NEGATIVE_BIGNUM, TAG_NAME_NEGATIVE_BIGNUM),
+  ]);
 
   // Summarizer for tag 2 (positive bignum)
   tagsStore.setSummarizer(

@@ -15,7 +15,7 @@
 
 import { type Cbor } from "./cbor";
 import { MajorType } from "./cbor-types";
-import { tagValuesEqual, type Tag } from "./tag";
+import { Tag, tagValuesEqual } from "./tag";
 import { CborError } from "./error";
 import { decodeCbor } from "./decode";
 
@@ -88,7 +88,10 @@ export const validateTag = (cbor: Cbor, expectedTags: Tag[]): Tag => {
   if (matchingTag === undefined) {
     // Produce the structured WrongTag variant rather than a stringly-typed
     // Custom error so callers can branch on `error.code === "WrongTag"`.
-    throw CborError.wrongTag(expectedTags[0], { value: tagValue });
+    // Both tags keep their names, as the reference's `WrongTag(Tag, Tag)`
+    // does: the expected one as `cborTags()` returned it, the actual one as
+    // the node carries it (a decoded node carries no name).
+    throw CborError.wrongTag(expectedTags[0], Tag.from(tagValue, cbor.tagName));
   }
 
   return matchingTag;

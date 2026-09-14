@@ -6,7 +6,7 @@
 
 import { MajorType } from "./cbor-types";
 import { encodeVarInt } from "./varint";
-import { f64CborData } from "./float";
+import { f64CborData, floatDisplayString } from "./float";
 
 /**
  * Represents CBOR simple values (major type 7).
@@ -34,7 +34,9 @@ export type Simple =
  * Returns the standard name of the simple value as a string.
  *
  * For `False`, `True`, and `Null`, this returns their lowercase string
- * representation. For `Float` values, it returns their numeric representation.
+ * representation. For `Float` values, it returns Rust's `{:?}` rendering:
+ * `NaN`, `inf`, `-inf`, or the shortest round-trip decimal with at least one
+ * fractional digit (`42.0`, `1.5`, `1e21`).
  */
 export const simpleName = (simple: Simple): string => {
   switch (simple.type) {
@@ -49,9 +51,9 @@ export const simpleName = (simple: Simple): string => {
       if (Number.isNaN(v)) {
         return "NaN";
       } else if (!Number.isFinite(v)) {
-        return v > 0 ? "Infinity" : "-Infinity";
+        return v > 0 ? "inf" : "-inf";
       } else {
-        return String(v);
+        return floatDisplayString(v);
       }
     }
   }

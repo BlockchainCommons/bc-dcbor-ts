@@ -1,5 +1,5 @@
-import { A as CborMap, C as CborDate, D as extractTaggedContent, E as decodeWith, F as isCborNaN, I as simpleName, M as CborNative, N as extractCbor, O as validateTag, P as Simple, S as isCborNumber, T as CborTagged, _ as CborTextType, a as taggedValue, b as ToCbor, c as CborArrayType, d as CborMapType, f as CborMethods, g as CborTaggedType, h as CborSimpleType, i as encodeCbor, j as MapEntry, k as ByteString, l as CborByteStringType, m as CborNumber, n as cbor, o as Tag, p as CborNegativeType, r as cborEquals, s as TagValue, t as Cbor, u as CborInput, v as CborUnsignedType, w as CborCodec, x as isCbor, y as MajorType } from "./cbor-D4SlBSmQ.mjs";
-import { a as TagsStoreOpt, c as CborError, d as CborErrorDetailsByCode, f as CborErrorTyped, h as Result, i as TagsStore, l as CborErrorCode, m as Ok, n as ReadonlyTagsStore, o as getGlobalTagsStore, p as Err, r as SummarizerResult, s as withTags, t as CborSummarizer, u as CborErrorDetails } from "./tags-store-D853hYTA.mjs";
+import { A as CborMap, C as CborDate, D as extractTaggedContent, E as decodeWith, F as isCborNaN, I as simpleName, M as CborNative, N as extractCbor, O as validateTag, P as Simple, S as isCborNumber, T as CborTagged, _ as CborTextType, a as taggedValue, b as ToCbor, c as CborArrayType, d as CborMapType, f as CborMethods, g as CborTaggedType, h as CborSimpleType, i as encodeCbor, j as MapEntry, k as ByteString, l as CborByteStringType, m as CborNumber, n as cbor, o as Tag, p as CborNegativeType, r as cborEquals, s as TagValue, t as Cbor, u as CborInput, v as CborUnsignedType, w as CborCodec, x as isCbor, y as MajorType } from "./cbor-BLp3F6gy.mjs";
+import { a as TagsStoreOpt, c as CborError, d as CborErrorDetailsByCode, f as CborErrorTyped, h as Result, i as TagsStore, l as CborErrorCode, m as Ok, n as ReadonlyTagsStore, o as getGlobalTagsStore, p as Err, r as SummarizerResult, s as withTags, t as CborSummarizer, u as CborErrorDetails } from "./tags-store-D9Qog-28.mjs";
 //#region src/hex.d.ts
 /**
  * Convert bytes to a lowercase hex string.
@@ -49,7 +49,9 @@ export declare function decodeCbor(data: Uint8Array): Cbor;
 /**
  * Decode without throwing: returns a {@link Result} carrying the decoded value,
  * or the {@link CborError} that {@link decodeCbor} would have thrown. Non-CBOR
- * errors still propagate.
+ * errors still propagate - including the host's `RangeError` when a deeply
+ * nested input exhausts the call stack (the reference aborts there; see
+ * RUST_DIVERGENCES.md §1.3).
  *
  * The `try` prefix means "returns `Result`, never throws" - everywhere in
  * this library.
@@ -290,9 +292,11 @@ export declare const TAG_NAME_DATE = "date";
  * Register the standard tags (date, bignums) and their summarizers into
  * `store`.
  *
- * Idempotent: tags already registered under the same name are skipped;
- * registering a value under a DIFFERENT name still throws via the store's
- * conflict validation.
+ * Re-registering is idempotent and moves each standard name back to its
+ * standard value, as the reference's `insert_all` does: a store that had
+ * named tag 99 `date` names tag 1 `date` afterwards. Registering tag 1 (or
+ * 2/3 with `bignum`) under a different name throws `CborError` `Custom`
+ * from the store's conflict validation, before any summarizer is set.
  *
  * @param store - Target store; defaults to the global tags store.
  */
@@ -773,13 +777,38 @@ export declare const asTaggedValue: (cbor: Cbor) => [Tag, Cbor] | undefined;
 //#endregion
 //#region src/conveniences-expect.d.ts
 /**
+ * Options for {@link expectUnsigned}: extract into a fixed-width unsigned
+ * integer the way the reference's `u8`/`u16`/`u32`/`u64: TryFrom<CBOR>`
+ * do (dcbor 0.25.2 `int.rs`).
+ */
+interface ExpectUnsignedOptions {
+  /** Target width in bits; an unsigned value above 2^width − 1 is `OutOfRange`. */
+  readonly width: 8 | 16 | 32 | 64;
+  /**
+   * Also accept a negative integer node and wrap it as the reference does:
+   * a value `v` in [−2^width, −1] yields `2^width + v` (so −1 is 255 at
+   * width 8), and a value below −2^width is `OutOfRange`. Off by default:
+   * without it a negative node is `WrongType`, as for every other type. See
+   * RUST_DIVERGENCES.md §1.6.
+   */
+  readonly wrapNegative?: boolean | undefined;
+}
+/**
  * Extract unsigned integer value, throwing if type doesn't match.
  *
+ * With `options`, the value is checked against a fixed width and, when
+ * `wrapNegative` is set, a negative node is wrapped exactly as the
+ * reference's `u*::try_from` wraps it (see {@link ExpectUnsignedOptions}).
+ *
  * @param cbor - CBOR value
- * @returns Unsigned integer
- * @throws {CborError} With type 'WrongType' if cbor is not an unsigned integer
+ * @param options - Fixed-width extraction (optional; without it the
+ *   behaviour is the plain `Unsigned`-or-`WrongType` check)
+ * @returns Unsigned integer (`bigint` above `Number.MAX_SAFE_INTEGER`)
+ * @throws {CborError} `WrongType` if cbor is not an unsigned integer (or,
+ *   with `wrapNegative`, not an integer); `OutOfRange` when the value does
+ *   not fit `width`
  */
-export declare const expectUnsigned: (cbor: Cbor) => number | bigint;
+export declare const expectUnsigned: (cbor: Cbor, options?: ExpectUnsignedOptions) => number | bigint;
 /**
  * Extract negative integer value, throwing if type doesn't match.
  *
@@ -859,16 +888,19 @@ export declare const expectFloat: (cbor: Cbor) => number;
  */
 export declare const expectNumber: (cbor: Cbor) => CborNumber;
 /**
- * Extract content if has specific tag, throwing if not.
+ * Extract content if has specific tag, throwing if not (the reference's
+ * `try_into_expected_tagged_value`).
  *
  * Throws `{ type: "WrongType" }` if `cbor` is not tagged at all, otherwise
- * `{ type: "WrongTag", expected, actual }` if the tag doesn't match.
+ * `{ type: "WrongTag", expected, actual }` if the tag doesn't match. The
+ * error names the expected tag as it was given (a `Tag` keeps its name; a
+ * number or bigint stays unnamed) and the actual tag as the node carries it.
  *
  * @param cbor - CBOR value
- * @param tag - Expected tag value
+ * @param tag - Expected tag value, or a `Tag`
  * @returns Tagged content
  */
-export declare const expectTaggedContent: (cbor: Cbor, tag: number | bigint) => Cbor;
+export declare const expectTaggedContent: (cbor: Cbor, tag: number | bigint | Tag) => Cbor;
 //#endregion
-export { ByteString, type CBORSortable, type Cbor, type CborArrayType, type CborByteStringType, type CborCodec, CborDate, CborError, type CborErrorCode, type CborErrorDetails, type CborErrorDetailsByCode, type CborErrorTyped, type CborInput, CborMap, type CborMapType, type CborMethods, type CborNative, type CborNegativeType, type CborNumber, type CborSimpleType, type CborSummarizer, type CborTagged, type CborTaggedType, type CborTextType, type CborUnsignedType, Err, MajorType, type MapEntry, Ok, type ReadonlyTagsStore, type RegisterStandardTagsOptions, type Result, type Simple, type SummarizerResult, Tag, type TagValue, TagsStore, type TagsStoreOpt, type ToCbor, cbor, cborEquals, decodeWith, encodeCbor, extractCbor, extractTaggedContent, getGlobalTagsStore, isCbor, isCborNaN, isCborNumber, simpleName, taggedValue, validateTag, withTags };
+export { ByteString, type CBORSortable, type Cbor, type CborArrayType, type CborByteStringType, type CborCodec, CborDate, CborError, type CborErrorCode, type CborErrorDetails, type CborErrorDetailsByCode, type CborErrorTyped, type CborInput, CborMap, type CborMapType, type CborMethods, type CborNative, type CborNegativeType, type CborNumber, type CborSimpleType, type CborSummarizer, type CborTagged, type CborTaggedType, type CborTextType, type CborUnsignedType, Err, type ExpectUnsignedOptions, MajorType, type MapEntry, Ok, type ReadonlyTagsStore, type RegisterStandardTagsOptions, type Result, type Simple, type SummarizerResult, Tag, type TagValue, TagsStore, type TagsStoreOpt, type ToCbor, cbor, cborEquals, decodeWith, encodeCbor, extractCbor, extractTaggedContent, getGlobalTagsStore, isCbor, isCborNaN, isCborNumber, simpleName, taggedValue, validateTag, withTags };
 //# sourceMappingURL=index.d.mts.map

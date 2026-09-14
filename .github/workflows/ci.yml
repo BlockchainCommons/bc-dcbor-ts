@@ -57,3 +57,21 @@ jobs:
 
       - name: Check dependency hygiene
         run: bun run check:deps
+
+  rust-validation:
+    name: Cross-validate vectors against the Rust reference
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # The runner image ships a stable Rust toolchain; the crate graph is
+      # small enough to build from scratch (no cache step to pin).
+      - name: Validate against dcbor (default build)
+        working-directory: tests/rust-validation
+        run: cargo run --release --locked -- ../vectors
+
+      - name: Validate against dcbor (num-bigint build)
+        working-directory: tests/rust-validation
+        run: cargo run --release --locked --features bignum -- ../vectors

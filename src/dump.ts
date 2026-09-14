@@ -19,6 +19,11 @@ import { Tag } from "./tag";
 import { CborError } from "./error";
 import { bytesToHex } from "./hex";
 
+// Strict UTF-8 decoder for the byte-string annotation. `ignoreBOM` keeps a
+// leading U+FEFF so the note shows every code point the bytes carry, as the
+// reference's `String::from_utf8` does.
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
 /**
  * Options for annotated hex formatting.
  */
@@ -118,9 +123,9 @@ function dumpItems(cbor: Cbor, level: number, tagsStore: TagsStore): DumpItem[] 
         let note: string | undefined = undefined;
         // Try to decode as UTF-8 string for annotation
         try {
-          const text = new TextDecoder("utf-8", { fatal: true }).decode(cbor.value);
+          const text = utf8Decoder.decode(cbor.value);
           const sanitizedText = sanitized(text);
-          if (sanitizedText !== undefined && sanitizedText !== "") {
+          if (sanitizedText !== undefined) {
             note = flanked(sanitizedText, '"', '"');
           }
         } catch {

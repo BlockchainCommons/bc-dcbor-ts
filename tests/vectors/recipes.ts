@@ -108,6 +108,13 @@ export type Recipe =
   /** Bare methodless Unsigned Cbor node (attachMethods passthrough arm). */
   | { k: "rawuint"; v: string }
   /**
+   * Bare methodless Text Cbor node holding `v` verbatim (no constructor
+   * normalization). Pins that NFC is applied at ENCODE time, as the reference
+   * does for `CBORCase::Text`: a decomposed string in the node still encodes
+   * composed.
+   */
+  | { k: "rawtext"; v: string }
+  /**
    * Bare methodless Negative Cbor node storing the MAGNITUDE-to-encode
    * (semantic value is -1-v, mirroring the decoder's representation).
    */
@@ -263,7 +270,7 @@ const cycleBytes = (start: number, count: number): Uint8Array => {
 
 /**
  * Construct the input a recipe describes, using `api`'s build of the library.
- * May throw that build's CborError (e.g. `date` with a non-finite timestamp,
+ * May throw that build's CborError (e.g. `date` with an infinite timestamp,
  * `biguint` with a negative value) - callers wanting an outcome use
  * {@link encodeOutcome}, which captures those uniformly.
  */
@@ -356,6 +363,8 @@ export function materialize(recipe: Recipe, api: VectorApi): unknown {
       const big = BigInt(recipe.v);
       return { isCbor: true, type: 0, value: big <= MAX_SAFE ? Number(big) : big };
     }
+    case "rawtext":
+      return { isCbor: true, type: 3, value: recipe.v };
     case "rawnegmag": {
       const big = BigInt(recipe.v);
       return { isCbor: true, type: 1, value: big <= MAX_SAFE ? Number(big) : big };
@@ -400,6 +409,21 @@ export function encodeOutcome(api: VectorApi, recipe: Recipe): EncodeOutcome {
     const code = api.errorCode(e);
     if (code === undefined) throw e;
     return { ok: false, code };
+  }
+}
+
+/**
+ * The message of the CborError a decode raises, or `undefined` when the
+ * bytes decode. Used by the golden fixtures: the reference's error `Display`
+ * text is part of the contract (`tests/rust-validation` compares it).
+ */
+export function decodeErrorMessage(api: VectorApi, bytes: Uint8Array): string | undefined {
+  try {
+    api.decode(bytes);
+    return undefined;
+  } catch (e) {
+    if (api.errorCode(e) === undefined) throw e;
+    return (e as Error).message;
   }
 }
 

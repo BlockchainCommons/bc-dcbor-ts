@@ -13,9 +13,18 @@
  */
 
 import type { CborInput } from "../src";
-import { cbor, CborMap, registerStandardTags, CborDate, decodeCbor, taggedValue } from "../src";
+import {
+  cbor,
+  CborMap,
+  registerStandardTags,
+  CborDate,
+  decodeCbor,
+  taggedValue,
+  simpleName,
+} from "../src";
 import { diagnostic } from "../src/diag";
 import { hexAnnotated } from "../src/dump";
+import { floatDisplayString } from "../src/float";
 
 /** Helper to convert a hex string to a Uint8Array. */
 function hexToBytes(hexStr: string): Uint8Array {
@@ -491,6 +500,99 @@ describe("format tests", () => {
       diagnosticFlat,
       hexValue,
       hexAnnotatedStr,
+    );
+  });
+});
+
+describe("float diagnostic matches Rust {:?} on exact decimal ties (DCBOR-06/07)", () => {
+  // JS `String()` rounds an exact decimal tie to the even digit; Rust's
+  // flt2dec rounds the magnitude up. Every expected string below was
+  // executed on the reference (`format!("{:?}", f64)`).
+  const dec = (hex: string) => decodeCbor(hexToBytes(hex));
+
+  it("rounds ties up in exponential notation", () => {
+    expect(diagnostic(dec("f9000a"))).toBe("5.960464477539063e-7"); // 10 * 2^-24
+    expect(diagnostic(dec("f90032"))).toBe("2.9802322387695313e-6"); // 50 * 2^-24
+    expect(diagnostic(dec("fa33000000"))).toBe("2.9802322387695313e-8"); // 2^-25
+    expect(diagnostic(cbor(-(10 * 2 ** -24)))).toBe("-5.960464477539063e-7");
+  });
+
+  it("rounds ties up in decimal notation", () => {
+    expect(diagnostic(dec("fb4090000010000000"))).toBe("1024.0000610351563"); // 1024 + 2^-14
+    expect(diagnostic(dec("fb4210000000000800"))).toBe("17179869184.007813"); // 2^34 + 2^-7
+    expect(diagnostic(cbor(-(1024 + 2 ** -14)))).toBe("-1024.0000610351563");
+    expect(hexAnnotated(dec("fb4090000010000000"))).toBe(
+      "fb4090000010000000  # 1024.0000610351563",
+    );
+  });
+
+  it("leaves non-tie values and the notation thresholds unchanged", () => {
+    expect(diagnostic(cbor(0.5 + 2 ** -53))).toBe("0.5000000000000001");
+    expect(diagnostic(cbor(1 + 3 * 2 ** -52))).toBe("1.0000000000000007");
+    expect(diagnostic(cbor(123456789.125))).toBe("123456789.125");
+    expect(diagnostic(cbor(4.35))).toBe("4.35");
+    expect(diagnostic(cbor(5e-324))).toBe("5e-324");
+    expect(diagnostic(cbor(0.0001))).toBe("0.0001");
+    expect(diagnostic(cbor(0.00001))).toBe("1e-5");
+    expect(diagnostic(cbor(1e21))).toBe("1e21");
+    expect(diagnostic(cbor(1.5e20))).toBe("1.5e20");
+    expect(diagnostic(cbor(-0.0))).toBe("0"); // -0.0 integer-reduces
+    expect(diagnostic(cbor(1.7976931348623157e308))).toBe("1.7976931348623157e308");
+    // Whole values integer-reduce through cbor(); the float renderer itself
+    // follows Rust's `{:?}` thresholds: decimal below 1e16, exponential from it.
+    expect(floatDisplayString(1.5e15)).toBe("1500000000000000.0");
+    expect(floatDisplayString(2 ** 53)).toBe("9007199254740992.0");
+    expect(floatDisplayString(1e16)).toBe("1e16");
+    expect(floatDisplayString(-1e16)).toBe("-1e16");
+  });
+
+  it("simpleName renders floats like Rust's Simple Debug", () => {
+    expect(simpleName({ type: "Float", value: Infinity })).toBe("inf");
+    expect(simpleName({ type: "Float", value: -Infinity })).toBe("-inf");
+    expect(simpleName({ type: "Float", value: NaN })).toBe("NaN");
+    expect(simpleName({ type: "Float", value: 1.5 })).toBe("1.5");
+    expect(simpleName({ type: "Float", value: 42 })).toBe("42.0");
+    expect(simpleName({ type: "Float", value: 10 * 2 ** -24 })).toBe("5.960464477539063e-7");
+    expect(simpleName({ type: "True" })).toBe("true");
+  });
+});
+
+describe("byte-string notes treat every non-ASCII code point as printable (DCBOR-04)", () => {
+  // Rust's `is_printable(c: char)` sees whole code points; the old
+  // UTF-16-unit check dropped astral characters. Executed on dcbor 0.25.2.
+  it("keeps astral characters in the note", () => {
+    expect(hexAnnotated(cbor(hexToBytes("f09f9880")))).toBe(
+      `44              # bytes(4)\n    f09f9880    # "😀"`,
+    );
+    expect(hexAnnotated(cbor(hexToBytes("00f09f9880")))).toBe(
+      `45              # bytes(5)\n    00f09f9880  # ".😀"`,
+    );
+    expect(hexAnnotated(cbor(hexToBytes("f0908080e29c93")))).toBe(
+      `47                  # bytes(7)\n    f0908080e29c93  # "𐀀✓"`,
+    );
+  });
+  it("still dots ASCII controls and omits the note when nothing is printable", () => {
+    expect(hexAnnotated(cbor(hexToBytes("0a41")))).toBe(
+      `42          # bytes(2)\n    0a41    # ".A"`,
+    );
+    expect(hexAnnotated(cbor(hexToBytes("00")))).toBe(`41      # bytes(1)\n    00`);
+  });
+});
+
+describe("text decoding keeps a leading U+FEFF (DCBOR-01)", () => {
+  // Rust's `String::from_utf8` preserves every code point; the WHATWG
+  // TextDecoder default silently strips a leading byte-order mark, which
+  // broke the decode -> re-encode round trip for `64efbbbf61`.
+  it("decodes a BOM-prefixed text string to the same bytes", () => {
+    const decoded = decodeCbor(hexToBytes("64efbbbf61"));
+    expect(decoded.type).toBe(3);
+    expect(decoded.value).toBe("\uFEFFa");
+    expect(decoded.toHex()).toBe("64efbbbf61");
+    expect(decodeCbor(hexToBytes("63efbbbf")).toHex()).toBe("63efbbbf");
+  });
+  it("annotates a BOM-prefixed byte string with the BOM in the note", () => {
+    expect(hexAnnotated(cbor(hexToBytes("efbbbf41")))).toBe(
+      `44              # bytes(4)\n    efbbbf41    # "\uFEFFA"`,
     );
   });
 });
