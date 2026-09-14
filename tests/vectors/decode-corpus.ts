@@ -1,18 +1,16 @@
 /**
- * Curated golden DECODE corpus (API_REDESIGN_PLAN P1.1a).
+ * Curated golden DECODE corpus.
  *
  * Byte sequences with the outcome `decodeCbor` must produce: acceptance
  * (in which case decode->re-encode must reproduce the input bytes exactly,
  * unless the entry pins a different `expect.hex` - whole-valued f32/f64 heads
  * decode to integer nodes, as in the reference) or rejection with a specific
- * `CborError.code`. Covers every reachable
- * throw site in src/decode.ts (including the `checkCanonicalEncoding`
- * re-encode rejections and CborMap.setNext map-ordering errors), each
- * error propagated through nested containers, and the canonical-form
- * accepts that are easy to get wrong.
+ * `CborError.code`. Covers every reachable throw site in src/decode.ts
+ * (including the `checkCanonicalEncoding` re-encode rejections and
+ * CborMap.setNext map-ordering errors), each error propagated through nested
+ * containers, and the canonical-form accepts that are easy to get wrong.
  *
- * All vectors were machine-verified against the pre-redesign build; the
- * generator (`scripts/generate-vectors.mjs`) re-verifies each expectation
+ * The generator (`scripts/generate-vectors.ts`) re-verifies each expectation
  * and fails loudly on any mismatch before writing
  * `tests/vectors/decode-vectors.json`.
  */
@@ -33,19 +31,19 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/Underrun/(empty)",
     hex: "",
     expect: { ok: false, code: "Underrun" },
-    note: "empty input: readCbor L159 remaining<1",
+    note: "empty input",
   },
   {
     name: "reject/Underrun/18",
     hex: "18",
     expect: { ok: false, code: "Underrun" },
-    note: "uint 2-byte head, 0 of 1 arg bytes (L103)",
+    note: "uint 2-byte head, 0 of 1 arg bytes",
   },
   {
     name: "reject/Underrun/19",
     hex: "19",
     expect: { ok: false, code: "Underrun" },
-    note: "uint 3-byte head, 0 of 2 arg bytes (L112)",
+    note: "uint 3-byte head, 0 of 2 arg bytes",
   },
   {
     name: "reject/Underrun/1900",
@@ -57,13 +55,13 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/Underrun/1a000000",
     hex: "1a000000",
     expect: { ok: false, code: "Underrun" },
-    note: "uint 5-byte head, 3 of 4 arg bytes (L122)",
+    note: "uint 5-byte head, 3 of 4 arg bytes",
   },
   {
     name: "reject/Underrun/1b00000000000000",
     hex: "1b00000000000000",
     expect: { ok: false, code: "Underrun" },
-    note: "uint 9-byte head, 7 of 8 arg bytes (L134)",
+    note: "uint 9-byte head, 7 of 8 arg bytes",
   },
   {
     name: "reject/Underrun/38",
@@ -117,7 +115,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/Underrun/f9",
     hex: "f9",
     expect: { ok: false, code: "Underrun" },
-    note: "f16 head with no payload (hv25 dataRemaining<2)",
+    note: "f16 head with no payload",
   },
   {
     name: "reject/Underrun/f97e",
@@ -141,7 +139,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/Underrun/41",
     hex: "41",
     expect: { ok: false, code: "Underrun" },
-    note: "bytestring declares 1 body byte, has 0 (L181)",
+    note: "bytestring declares 1 body byte, has 0",
   },
   {
     name: "reject/Underrun/4401ff02",
@@ -153,7 +151,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/Underrun/61",
     hex: "61",
     expect: { ok: false, code: "Underrun" },
-    note: "text declares 1 body byte, has 0 (L192)",
+    note: "text declares 1 body byte, has 0",
   },
   {
     name: "reject/Underrun/626f",
@@ -219,7 +217,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/UnsupportedHeaderValue/1c",
     hex: "1c",
     expect: { ok: false, code: "UnsupportedHeaderValue" },
-    note: "major 0 headerValue 28 (L152), details.headerValue=28",
+    note: "major 0 headerValue 28, details.headerValue=28",
   },
   {
     name: "reject/UnsupportedHeaderValue/1d",
@@ -399,7 +397,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/NonCanonicalNumeric/1800",
     hex: "1800",
     expect: { ok: false, code: "NonCanonicalNumeric" },
-    note: "uint 0 in 2-byte head (value<24, L107)",
+    note: "uint 0 in 2-byte head (value<24)",
   },
   {
     name: "reject/NonCanonicalNumeric/1817",
@@ -411,7 +409,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/NonCanonicalNumeric/190017",
     hex: "190017",
     expect: { ok: false, code: "NonCanonicalNumeric" },
-    note: "uint 23 in 3-byte head (value<=0xff, L117)",
+    note: "uint 23 in 3-byte head (value<=0xff)",
   },
   {
     name: "reject/NonCanonicalNumeric/1900ff",
@@ -423,7 +421,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/NonCanonicalNumeric/1a00000017",
     hex: "1a00000017",
     expect: { ok: false, code: "NonCanonicalNumeric" },
-    note: "uint 23 in 5-byte head (value<=0xffff, L129)",
+    note: "uint 23 in 5-byte head (value<=0xffff)",
   },
   {
     name: "reject/NonCanonicalNumeric/1a0000ffff",
@@ -435,7 +433,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/NonCanonicalNumeric/1b0000000000000017",
     hex: "1b0000000000000017",
     expect: { ok: false, code: "NonCanonicalNumeric" },
-    note: "uint 23 in 9-byte head (value<=0xffffffff, L147)",
+    note: "uint 23 in 9-byte head (value<=0xffffffff)",
   },
   {
     name: "reject/NonCanonicalNumeric/1b00000000ffffffff",
@@ -549,7 +547,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     name: "reject/NonCanonicalNumeric/fb4045000000000000",
     hex: "fb4045000000000000",
     expect: { ok: false, code: "NonCanonicalNumeric" },
-    note: "42.0 as f64: re-encode reduces to int 182a (checkCanonicalEncoding L306)",
+    note: "42.0 as f64: re-encode reduces to int 182a (checkCanonicalEncoding)",
   },
   {
     name: "reject/NonCanonicalNumeric/fa42280000",
@@ -833,7 +831,7 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     expect: { ok: false, code: "InvalidUtf8" },
     note: "0xff is never valid in UTF-8",
   },
-  // Utf8Error message coverage (DCBOR-03): a bad second byte, a bad later
+  // Utf8Error message coverage: a bad second byte, a bad later
   // byte (error_len 2/3), an error after valid text (valid_up_to 3), and
   // truncation inside a sequence ("incomplete").
   {
@@ -1289,8 +1287,8 @@ export const decodeCorpus: DecodeCorpusEntry[] = [
     expect: { ok: true },
     note: "2^64 exactly as f32 - whole-valued but exceeds u64 by 1, so no integer reduction",
   },
-  // Whole-valued f32/f64 heads beyond the saturating-cast bounds (DCBOR-05,
-  // Rust `validate_canonical_f32/f64` + `From<f32/f64>`): accepted, and the
+  // Whole-valued f32/f64 heads beyond the saturating-cast bounds (Rust
+  // `validate_canonical_f32/f64` + `From<f32/f64>`): accepted, and the
   // node is the integer the value reduces to (or stays a float when no
   // integer fits), so the re-encoding may differ from the input.
   {

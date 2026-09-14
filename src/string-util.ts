@@ -1,5 +1,5 @@
 /**
- * String utilities for dCBOR, including Unicode normalization.
+ * String helpers for the diagnostic and hex-dump formatters.
  *
  * @module string-util
  */
@@ -30,7 +30,6 @@ const isPrintable = (c: string): boolean => {
 
 /**
  * Sanitize a string by replacing non-printable characters with dots.
- * Returns None if the string has no printable characters.
  *
  * @param str - String to sanitize
  * @returns Sanitized string or undefined if no printable characters

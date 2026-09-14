@@ -12,7 +12,7 @@ export default defineConfig({
       reportsDirectory: "coverage",
       include: ["src/**/*.ts"],
       exclude: ["src/**/*.d.ts", "src/index.ts"],
-      // Raise-only floors. Seed from the first measured run; never lower.
+      // Raise-only floors: raise them as coverage grows, never lower them.
       thresholds: {
         statements: 70,
         branches: 66,

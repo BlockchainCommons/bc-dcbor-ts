@@ -1,6 +1,6 @@
 /**
  * Guard: the engine's Unicode tables must not be older than the
- * reference's (DCBOR-12).
+ * reference's.
  *
  * Decoding rejects non-NFC text with `String.prototype.normalize`; the
  * reference uses the `unicode-normalization` crate (0.1.25, Unicode 17).

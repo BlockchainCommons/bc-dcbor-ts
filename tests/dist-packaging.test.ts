@@ -1,11 +1,10 @@
 /**
- * Dist-level packaging assertions (P3.18).
+ * Dist-level packaging assertions.
  *
- * Runs against the BUILT `dist/` output (skipped when absent - CI builds
- * before testing). The critical invariant: the subpath entries share chunks
- * with the root entry, so module-level singletons (the global tags store)
- * are one instance across entries. IIFE output was dropped precisely
- * because it would fork that singleton.
+ * Runs against the built `dist/` output (skipped when absent - CI builds
+ * before testing). The subpath entries share chunks with the root entry, so
+ * module-level state (the global tags store, the `Cbor` prototype) is one
+ * instance across entries.
  */
 
 import { existsSync } from "node:fs";
@@ -17,7 +16,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const dist = join(here, "..", "dist");
 const built = existsSync(join(dist, "index.mjs")) && existsSync(join(dist, "diagnostic.mjs"));
 
-describe.skipIf(!built)("dist packaging (P3.18)", () => {
+describe.skipIf(!built)("dist packaging", () => {
   it("tags-store singleton is shared across subpath entries", async () => {
     const root = (await import(join(dist, "index.mjs"))) as {
       getGlobalTagsStore(): { register(tag: { value: number; name: string }): void };
@@ -34,7 +33,7 @@ describe.skipIf(!built)("dist packaging (P3.18)", () => {
     expect(rendered).toContain("dist-singleton-probe");
   });
 
-  // TAGS-03: the global store is keyed on globalThis, so the CommonJS build
+  // The global store is keyed on globalThis, so the CommonJS build
   // and the ESM build - two module instances - resolve one store, as the
   // reference's process-wide GLOBAL_TAGS.
   it("global tags store is one instance across the CJS and ESM builds", async () => {

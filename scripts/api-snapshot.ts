@@ -1,9 +1,9 @@
 /**
  * Public-API snapshot.
  *
- * Snapshots the built public type declarations of EVERY entry point
- * (dist/<entry>.d.mts) to api/<entry>.d.mts so any change to the public
- * surface is a reviewable diff (P3.18: index + diagnostic + walk + debug).
+ * Snapshots the built public type declarations of every entry point (index,
+ * diagnostic, walk, debug) from dist/<entry>.d.mts to api/<entry>.d.mts, so
+ * any change to the public surface is a reviewable diff.
  *
  *   bun run api:snapshot   # write/update the snapshots from the current build
  *   bun run api:check      # fail if any built .d.mts differs from its snapshot

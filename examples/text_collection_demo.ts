@@ -16,7 +16,7 @@ import { MajorType } from "../src/cbor";
 function main() {
   // Create a simple map with text keys and values
   const map = new CborMap();
-  map.set("name", "Alice"); // Both text - should be easy to collect
+  map.set("name", "Alice"); // Text key, text value
   map.set("age", 30); // Text key, number value
   map.set("nested", [1, 2]); // Text key, array value
   const cborData = cbor(map);

@@ -44,8 +44,8 @@ uint: 19 vectors - 11 match, 8 reference-throw, 0 expected-divergence, 0 MISMATC
   harness probes chrono's `timestamp_opt` with the reference's own
   arithmetic before calling into it.
 - **skipped** counts JS-only input shapes (`Symbol`, function, malformed
-  bare node), tombstoned recipes, rows pinned to the other build, and the
-  bignum recipes in the default build.
+  bare node), the rejected legacy protocol shapes (§3), rows pinned to the
+  other build, and the bignum recipes in the default build.
 - Decode vectors whose accepted input re-encodes differently (whole-valued
   f32/f64 heads) carry the reference's re-encoded bytes.
 - Format vectors cover diagnostic notation (plain, annotated, flat,
@@ -90,7 +90,7 @@ identically: a fraction just below the minimum truncates into range
 printed `1970-01-01`), and an integer timestamp `f64` cannot hold exactly is
 `OutOfRange` on both sides (`c11b7fffffffffffffff`). Executed on the
 reference at the exact bounds (`date-vectors.json`). Reported upstream
-(issue link pending; drafts in the bc-typescript audit).
+(issue link pending).
 
 ### 1.2 Tag registration errors
 
@@ -140,9 +140,8 @@ of rejecting it (`int.rs`, `Ok((-1 - a) as $type)`; executed:
 beyond the width (harness `uint` vectors). Without options,
 `expectUnsigned` still throws `WrongType` for any negative integer. A
 consumer that ports a field decoded with `u*::try_from` records whether it
-matches the wrap: bc-components-ts (COMP-05, COMP-09) uses the helper, and
-bc-known-values-ts (KV-04, D2) records its choice. Reported upstream (issue
-link pending).
+matches the wrap: bc-components-ts uses the helper, and bc-known-values-ts
+records its choice. Reported upstream (issue link pending).
 
 ---
 
@@ -185,10 +184,10 @@ Rows documenting rejected legacy inputs are TypeScript-only checks.
 | lone surrogate strings (`"\ud800"`) | U+FFFD replacement (`63efbfbd` for the 3-byte text) | JS `TextEncoder` replacement semantics; Rust `String` cannot hold lone surrogates. `str/lone-surrogate-becomes-replacement` |
 | JS `Set` input | plain array in **insertion order** (SameValueZero dedup) | unlike `CborSet` (canonical sort + dedup), which matches Rust `Set` exactly. `jsset/*` |
 | JS `Map` / plain-object input | `CborMap` → canonical key-byte order, duplicate canonical keys last-write-wins | Rust `Map::insert` behaves identically once constructed. `jsmap/*`, `obj/*` |
-| `{tag: T, value: V}` two-own-key literal | **throws directive `Custom`** (was: `to_tagged_value(T, V)` bytes) | TS-only tombstone; skipped by the Rust harness. `tagobjlit/*` |
+| `{tag: T, value: V}` two-own-key literal | **throws directive `Custom`** (was: `to_tagged_value(T, V)` bytes) | TS-only rejection; skipped by the Rust harness. `tagobjlit/*` |
 | objects with inherited `tag`/`value` (prototype) | plain-object→map of OWN keys only | freezes the sniffing arm's own-keys boundary. `protoobj/*` |
 | `toCbor()` protocol objects | the underlying value's bytes | the ONE encode protocol. `tocbor/*` |
-| `taggedCbor()`-only objects | **throws directive `Custom`** (was: auto-wrapped) | TS-only tombstone; skipped by the Rust harness. `taggedproto/*` |
+| `taggedCbor()`-only objects | **throws directive `Custom`** (was: auto-wrapped) | TS-only rejection; skipped by the Rust harness. `taggedproto/*` |
 | objects with BOTH protocols | `["toCbor-won", inner]` bytes - **`toCbor` wins** (was: `taggedCbor` won) | the harness mirrors the new precedence. `bothproto/*` |
 | `cbor(bigint)` outside `[-(2⁶⁴), 2⁶⁴−1]` | throws `OutOfRange` | Rust cannot express this input: it has **no** `i128`/`u128 → CBOR` conversion (its own tests construct via `CBORCase`), so the range guard is TS surface behavior. The in-range bigint bytes match Rust's `CBORCase::Unsigned`/`Negative` exactly. `int/2^64-bigint-throws`, `int/below-cbor-int-min-throws` |
 | `biguintToCbor(negative)` | throws `OutOfRange` | Rust's `From<BigUint>` cannot receive a negative - type-level in Rust, runtime guard in TS. `biguint/negative-throws` |

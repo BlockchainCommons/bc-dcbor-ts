@@ -132,7 +132,7 @@ describe("TagsStore", () => {
   });
 });
 
-describe("registerStandardTags registers unconditionally, like insert_all (TAGS-01)", () => {
+describe("registerStandardTags registers unconditionally, like insert_all", () => {
   it("moves the standard name back to the standard value", async () => {
     const { registerStandardTags } = await import("../src/tags");
     const store = new TagsStore();
@@ -171,7 +171,7 @@ describe("registerStandardTags registers unconditionally, like insert_all (TAGS-
     expect(store.summarizer(1)).toBeUndefined();
     expect(store.nameForValue(1)).toBe("other");
   });
-  it("registerAll accepts a readonly array", () => {
+  it("registerAll accepts a readonly array or any iterable", () => {
     const store = new TagsStore();
     const frozen: readonly Tag[] = Object.freeze([Tag.from(5, "five")]);
     store.registerAll(frozen);
@@ -181,7 +181,7 @@ describe("registerStandardTags registers unconditionally, like insert_all (TAGS-
   });
 });
 
-describe("tags are frozen values; the store keeps them by identity (TAGS-02)", () => {
+describe("tags are frozen values; the store keeps them by identity", () => {
   it("Tag.from returns a frozen object", () => {
     expect(Object.isFrozen(Tag.from(1, "date"))).toBe(true);
     expect(Object.isFrozen(Tag.from(12345))).toBe(true);
@@ -207,7 +207,7 @@ describe("tags are frozen values; the store keeps them by identity (TAGS-02)", (
   });
 });
 
-describe("TagsStore.clone mirrors #[derive(Clone)] (DCBOR-15)", () => {
+describe("TagsStore.clone mirrors #[derive(Clone)]", () => {
   it("answers every lookup like the original and shares frozen tags and summarizers", () => {
     const store = new TagsStore();
     const answer = Tag.from(42, "answer");
@@ -236,7 +236,7 @@ describe("TagsStore.clone mirrors #[derive(Clone)] (DCBOR-15)", () => {
   });
 });
 
-describe("one global tags store per process (TAGS-03)", () => {
+describe("one global tags store per process", () => {
   it("lives on globalThis under the registered symbol", async () => {
     const { getGlobalTagsStore } = await import("../src");
     const slot = globalThis as { [k: symbol]: unknown };
@@ -248,7 +248,7 @@ describe("one global tags store per process (TAGS-03)", () => {
   });
 });
 
-describe("registerStandardTags: the bignum tags are opt-in (review N3)", () => {
+describe("registerStandardTags: the bignum tags are opt-in", () => {
   it("names only the date tag by default, as the reference without num-bigint", async () => {
     const { registerStandardTags, TAG_DATE, TAG_POSITIVE_BIGNUM, TAG_NEGATIVE_BIGNUM } =
       await import("../src/tags");
@@ -268,7 +268,7 @@ describe("registerStandardTags: the bignum tags are opt-in (review N3)", () => {
     expect(store.tagForValue(TAG_NEGATIVE_BIGNUM)?.name).toBe("negative-bignum");
     expect(store.summarizer(BigInt(TAG_POSITIVE_BIGNUM))).toBeDefined();
   });
-  it("a registration conflict is the package's CborError (review N4)", async () => {
+  it("a registration conflict is the package's CborError", async () => {
     const { CborError } = await import("../src");
     const store = new TagsStore();
     store.register(Tag.from(100, "first-name"));

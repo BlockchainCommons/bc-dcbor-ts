@@ -115,7 +115,7 @@ export interface CborCodec<T> {
     readonly tags?: readonly Tag[] | undefined;
 }
 
-// @public (undocumented)
+// @public
 export class CborDate implements CborTagged {
     get [Symbol.toStringTag](): string;
     add(seconds: number): CborDate;
@@ -430,7 +430,7 @@ export function decodeWith<T>(data: Uint8Array, codec: CborCodec<T>): T;
 // @public
 export const encodeCbor: (value: CborInput) => Uint8Array<ArrayBuffer>;
 
-// @public (undocumented)
+// @public
 export const encodeVarInt: (value: CborNumber, majorType: MajorType) => Uint8Array<ArrayBuffer>;
 
 // @public
@@ -613,7 +613,7 @@ export interface ReadonlyTagsStore {
     tagForValue(value: CborNumber): Tag | undefined;
 }
 
-// @public (undocumented)
+// @public
 export const registerStandardTags: (store?: TagsStore, options?: RegisterStandardTagsOptions) => void;
 
 // @public

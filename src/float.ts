@@ -1,21 +1,13 @@
 /**
  * Float encoding and conversion utilities for dCBOR.
  *
- * # Floating Point Number Support in dCBOR
+ * The dCBOR canonical encoding rules for floating point values:
  *
- * dCBOR provides canonical encoding for floating point values.
- *
- * Per the dCBOR specification, the canonical encoding rules ensure
- * deterministic representation:
- *
- * - Numeric reduction: Floating point values with zero fractional part in
- *   range [-2^63, 2^64-1] are automatically encoded as integers (e.g., 42.0
- *   becomes 42)
- * - Values are encoded in the smallest possible representation that preserves
- *   their value
- * - All NaN values are canonicalized to a single representation: 0xf97e00
- * - Positive/negative infinity are canonicalized to half-precision
- *   representations
+ * - Numeric reduction: a float with zero fractional part in
+ *   [-2^64, 2^64-1] is encoded as an integer (42.0 becomes 42)
+ * - Other values use the smallest width (f16, f32, f64) that preserves them
+ * - Every NaN is encoded as the single representation 0xf97e00
+ * - Positive and negative infinity are encoded as half-precision floats
  *
  * @module float
  */
@@ -71,11 +63,10 @@ const f32ScratchView = new DataView(new ArrayBuffer(4));
  * Compute the 16-bit pattern of the IEEE-754 half-precision value nearest `n`,
  * rounding ties to even.
  *
- * All call sites pass values already exactly representable in binary16 (the
- * reduction gates in {@link f16CborData} ensure this), so no rounding occurs on
- * a value that is actually stored; the rounding path exists only so the
- * reduction round-trip probe (`binary16ToNumber(numberToBinary16(n)) === n`)
- * answers correctly for non-representable inputs.
+ * A value is only stored as a half after the round-trip probe
+ * (`binary16ToNumber(numberToBinary16(n)) === n`) succeeds, so stored values
+ * never round; the rounding makes that probe, and the reference's
+ * `f16::from_f32` in `validateCanonicalF32`, answer correctly for any input.
  */
 const float16Bits = (n: number): number => {
   f32ScratchView.setFloat32(0, n, false);
@@ -493,9 +484,6 @@ const rustShortestDigits = (abs: number): { digits: string; exp10: number } => {
  * (`1.5e20`, `5e-324` - no `+`, no padding). Zero prints as `0.0`/`-0.0`.
  * Digits are the shortest round-trip sequence, with exact decimal ties rounded
  * up like Rust (see {@link rustShortestDigits}).
- *
- * @param value - The float value
- * @returns The diagnostic string
  */
 export const floatDisplayString = (value: number): string => {
   if (Number.isNaN(value)) return "NaN";

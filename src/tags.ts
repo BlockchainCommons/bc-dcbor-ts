@@ -40,7 +40,7 @@ export const TAG_EPOCH_DATE = 100;
 export const TAG_POSITIVE_BIGNUM = 2;
 
 /**
- * Tag 3: Negative bignum (signed arbitrary-precision integer)
+ * Tag 3: Negative bignum (arbitrary-precision negative integer)
  */
 export const TAG_NEGATIVE_BIGNUM = 3;
 
@@ -164,18 +164,6 @@ import { biguintFromUntaggedCbor, bigintFromNegativeUntaggedCbor } from "./bignu
 export const TAG_DATE = 1;
 export const TAG_NAME_DATE = "date";
 
-/**
- * Register the standard tags (date, bignums) and their summarizers into
- * `store`.
- *
- * Re-registering is idempotent and moves each standard name back to its
- * standard value, as the reference's `insert_all` does: a store that had
- * named tag 99 `date` names tag 1 `date` afterwards. Registering tag 1 (or
- * 2/3 with `bignum`) under a different name throws `CborError` `Custom`
- * from the store's conflict validation, before any summarizer is set.
- *
- * @param store - Target store; defaults to the global tags store.
- */
 /** Options for {@link registerStandardTags}. */
 export interface RegisterStandardTagsOptions {
   /**
@@ -188,6 +176,18 @@ export interface RegisterStandardTagsOptions {
   readonly bignum?: boolean | undefined;
 }
 
+/**
+ * Register the standard tags (date, and the bignums with `bignum`) and their
+ * summarizers into `store`.
+ *
+ * Re-registering is idempotent and moves each standard name back to its
+ * standard value, as the reference's `insert_all` does: a store that had
+ * named tag 99 `date` names tag 1 `date` afterwards. Registering tag 1 (or
+ * 2/3 with `bignum`) under a different name throws `CborError` `Custom`
+ * from the store's conflict validation, before any summarizer is set.
+ *
+ * @param store - Target store; defaults to the global tags store.
+ */
 export const registerStandardTags = (
   store: TagsStore = getGlobalTagsStore(),
   options: RegisterStandardTagsOptions = {},
@@ -244,31 +244,15 @@ export const registerStandardTags = (
 };
 
 /**
- * Converts an array of tag values to their corresponding Tag objects.
- *
- * This function looks up each tag value in the global tag registry and returns
- * an array of complete Tag objects. For any tag values that aren't
- * registered in the global registry, it creates a basic Tag with just the
- * value (no name).
- *
- * @param values - Array of numeric tag values to convert
- * @returns Array of Tag objects corresponding to the input values
+ * Resolve tag values through the global tags store. A value the store does
+ * not know becomes an unnamed `Tag`.
  *
  * @example
  * ```typescript
- * // Register some tags first
  * registerStandardTags();
- *
- * // Convert tag values to Tag objects
- * const tags = tagsForValues([1, 42, 999]);
- *
- * // The first tag (value 1) should be registered as "date"
- * console.log(tags[0].value); // 1
- * console.log(tags[0].name); // "date"
- *
- * // Unregistered tags will have a value but no name
- * console.log(tags[1].value); // 42
- * console.log(tags[2].value); // 999
+ * const tags = tagsForValues([1, 42]);
+ * tags[0].name; // "date"
+ * tags[1].name; // undefined
  * ```
  */
 export const tagsForValues = (values: (number | bigint)[]): Tag[] => {
@@ -278,7 +262,6 @@ export const tagsForValues = (values: (number | bigint)[]): Tag[] => {
     if (tag !== undefined) {
       return tag;
     }
-    // Create basic tag with just the value
     return Tag.from(value);
   });
 };

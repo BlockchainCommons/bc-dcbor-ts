@@ -128,7 +128,8 @@ export class TagsStore implements ReadonlyTagsStore {
    * object never changes a lookup.
    *
    * @param tag - The tag to register (must have a non-empty name)
-   * @throws Error if tag has no name, empty name, or conflicts with existing registration
+   * @throws {CborError} `Custom` if the tag has no name, an empty name, or
+   *   conflicts with an existing registration
    *
    * @example
    * ```typescript
@@ -171,7 +172,7 @@ export class TagsStore implements ReadonlyTagsStore {
 
   /**
    * An independent copy of this store (the reference's `#[derive(Clone)]`
-   * on `TagsStore`, `tags_store.rs:211`).
+   * on `TagsStore`).
    *
    * The clone holds the same frozen tags by identity and shares the
    * summarizer functions, as the reference's `Arc` summarizers are shared.
@@ -195,10 +196,10 @@ export class TagsStore implements ReadonlyTagsStore {
    *
    * @example
    * ```typescript
-   * store.setSummarizer(1, (cbor, flat) => {
-   *   // Custom date formatting
-   *   return `Date(${extractCbor(cbor)})`;
-   * });
+   * store.setSummarizer(1, (cbor, flat) => ({
+   *   ok: true,
+   *   value: `Date(${extractCbor(cbor)})`,
+   * }));
    * ```
    */
   setSummarizer(tagValue: CborNumber, summarizer: CborSummarizer): void {
@@ -235,12 +236,7 @@ export class TagsStore implements ReadonlyTagsStore {
     return this._summarizers.get(key);
   }
 
-  /**
-   * Create a string key for a numeric tag value.
-   * Handles both number and bigint types.
-   *
-   * @private
-   */
+  /** Map key for a tag value, equal for a `number` and the same `bigint`. */
   private _valueKey(value: CborNumber): string {
     return value.toString();
   }

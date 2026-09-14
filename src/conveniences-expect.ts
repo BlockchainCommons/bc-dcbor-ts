@@ -88,7 +88,7 @@ export const expectUnsigned = (cbor: Cbor, options?: ExpectUnsignedOptions): num
  *
  * @param cbor - CBOR value
  * @returns Negative integer
- * @throws {CborError} With type 'WrongType' if cbor is not a negative integer
+ * @throws {CborError} `WrongType` if cbor is not a negative integer
  */
 export const expectNegative = (cbor: Cbor): number | bigint => {
   const value = asNegative(cbor);
@@ -103,7 +103,7 @@ export const expectNegative = (cbor: Cbor): number | bigint => {
  *
  * @param cbor - CBOR value
  * @returns Integer
- * @throws {CborError} With type 'WrongType' if cbor is not an integer
+ * @throws {CborError} `WrongType` if cbor is not an integer
  */
 export const expectInteger = (cbor: Cbor): number | bigint => {
   const value = asInteger(cbor);
@@ -116,15 +116,13 @@ export const expectInteger = (cbor: Cbor): number | bigint => {
 /**
  * Extract byte string value, throwing if type doesn't match.
  *
+ * Decoded byte strings are zero-copy views aliasing the input buffer -
+ * mutating the input after decoding (or mutating the returned bytes) changes
+ * the other side. Call `.slice()` first if you need an independent copy.
+ *
  * @param cbor - CBOR value
  * @returns Byte string
- * @throws {CborError} With type 'WrongType' if cbor is not a byte string
- *
- * NOTE: decoded byte strings are zero-copy views aliasing the input
- * buffer - mutating the input after decoding (or mutating the returned
- * bytes) changes the other side. Call `.slice()` first if you need an
- * independent copy. This is deliberate: the zero-copy decode performance
- * profile is part of the library's contract.
+ * @throws {CborError} `WrongType` if cbor is not a byte string
  */
 export const expectBytes = (cbor: Cbor): Uint8Array => {
   const value = asBytes(cbor);
@@ -139,7 +137,7 @@ export const expectBytes = (cbor: Cbor): Uint8Array => {
  *
  * @param cbor - CBOR value
  * @returns Text string
- * @throws {CborError} With type 'WrongType' if cbor is not a text string
+ * @throws {CborError} `WrongType` if cbor is not a text string
  */
 export const expectText = (cbor: Cbor): string => {
   const value = asText(cbor);
@@ -154,7 +152,7 @@ export const expectText = (cbor: Cbor): string => {
  *
  * @param cbor - CBOR value
  * @returns Array
- * @throws {CborError} With type 'WrongType' if cbor is not an array
+ * @throws {CborError} `WrongType` if cbor is not an array
  */
 export const expectArray = (cbor: Cbor): readonly Cbor[] => {
   const value = asArray(cbor);
@@ -169,7 +167,7 @@ export const expectArray = (cbor: Cbor): readonly Cbor[] => {
  *
  * @param cbor - CBOR value
  * @returns Map
- * @throws {CborError} With type 'WrongType' if cbor is not a map
+ * @throws {CborError} `WrongType` if cbor is not a map
  */
 export const expectMap = (cbor: Cbor): CborMap => {
   const value = asMap(cbor);
@@ -184,7 +182,7 @@ export const expectMap = (cbor: Cbor): CborMap => {
  *
  * @param cbor - CBOR value
  * @returns Boolean
- * @throws {CborError} With type 'WrongType' if cbor is not a boolean
+ * @throws {CborError} `WrongType` if cbor is not a boolean
  */
 export const expectBoolean = (cbor: Cbor): boolean => {
   const value = asBoolean(cbor);
@@ -197,13 +195,14 @@ export const expectBoolean = (cbor: Cbor): boolean => {
 /**
  * Extract float value, throwing if type doesn't match.
  *
+ * Integers coerce to float, as for {@link asFloat}.
+ *
  * @param cbor - CBOR value
  * @returns Float
- * @throws {CborError} With type 'WrongType' if cbor is not a float
+ * @throws {CborError} `WrongType` if cbor is not numeric; `OutOfRange` if an
+ *   integer is not exactly representable as f64
  */
 export const expectFloat = (cbor: Cbor): number => {
-  // Numeric types coerce to float (OutOfRange if an integer isn't exactly
-  // representable as f64); anything else is WrongType.
   if (cbor.type === MajorType.Unsigned || cbor.type === MajorType.Negative) {
     const value = asFloat(cbor);
     if (value === undefined) {
@@ -222,7 +221,7 @@ export const expectFloat = (cbor: Cbor): number => {
  *
  * @param cbor - CBOR value
  * @returns Number
- * @throws {CborError} With type 'WrongType' if cbor is not a number
+ * @throws {CborError} `WrongType` if cbor is not a number
  */
 export const expectNumber = (cbor: Cbor): CborNumber => {
   const value = asNumber(cbor);
@@ -236,14 +235,15 @@ export const expectNumber = (cbor: Cbor): CborNumber => {
  * Extract content if has specific tag, throwing if not (the reference's
  * `try_into_expected_tagged_value`).
  *
- * Throws `{ type: "WrongType" }` if `cbor` is not tagged at all, otherwise
- * `{ type: "WrongTag", expected, actual }` if the tag doesn't match. The
- * error names the expected tag as it was given (a `Tag` keeps its name; a
- * number or bigint stays unnamed) and the actual tag as the node carries it.
+ * The `WrongTag` error names the expected tag as it was given (a `Tag` keeps
+ * its name; a number or bigint stays unnamed) and the actual tag as the node
+ * carries it.
  *
  * @param cbor - CBOR value
  * @param tag - Expected tag value, or a `Tag`
  * @returns Tagged content
+ * @throws {CborError} `WrongType` if `cbor` is not tagged; `WrongTag` (with
+ *   `details.expectedTag` and `details.actualTag`) if the tag doesn't match
  */
 export const expectTaggedContent = (cbor: Cbor, tag: number | bigint | Tag): Cbor => {
   if (cbor.type !== MajorType.Tagged) {

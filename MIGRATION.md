@@ -2,27 +2,27 @@
 
 `@blockchaincommons/dcbor` is the redesigned successor to `@bcts/dcbor`.
 
-## TL;DR checklist
+## Summary
 
-- [ ] Replace the dependency `@bcts/dcbor` with `@blockchaincommons/dcbor`; update imports.
-- [ ] Import `diagnostic`/`hexAnnotated` from `@blockchaincommons/dcbor/diagnostic` and
-      `walk` & friends from `@blockchaincommons/dcbor/walk` (they left the root).
-- [ ] `cborData(v)` → `encodeCbor(v)`; `toTaggedValue(t, v)` → `taggedValue(t, v)`.
-- [ ] Replace `Cbor` *value* usages (`Cbor.from`, `Cbor.tryFromData`,
-      `Cbor.True`…) - the type survives, the namespace value is gone.
-- [ ] Move instance-method calls to free functions (`c.isMap()` → `isMap(c)`,
-      `c.toText()` → `expectText(c)`, …) - the value keeps only
-      `toData()`/`toHex()`/`toString()`.
-- [ ] Errors: `errorToString(e)`/`errorMsg(e)` → `e.message`;
-      `e.errorType.type` → `e.code`; `e.errorType.<field>` → `e.details.<field>`;
-      `new CborError({ type })` → `CborError.<factory>()`.
-- [ ] Containers: `CborMap.new()/insert/containsKey/len` →
-      `new CborMap()/set/has/size`; `CborSet.insert/contains/fromArray` →
-      `add/has/from`; note `CborMap.get` now returns the stored `Cbor` node.
-- [ ] Fix the two shapes that now THROW: plain `{tag, value}` object
-      literals and `taggedCbor()`-only objects (see below).
-- [ ] *(optional)* adopt `tryDecode()` (non-throwing) and
-      `decodeWith(bytes, codec)` (typed decode, `@beta`).
+- Replace the dependency `@bcts/dcbor` with `@blockchaincommons/dcbor`; update imports.
+- Import `diagnostic`/`hexAnnotated` from `@blockchaincommons/dcbor/diagnostic` and
+  `walk` & friends from `@blockchaincommons/dcbor/walk` (they left the root).
+- `cborData(v)` → `encodeCbor(v)`; `toTaggedValue(t, v)` → `taggedValue(t, v)`.
+- Replace `Cbor` *value* usages (`Cbor.from`, `Cbor.tryFromData`,
+  `Cbor.True`…) - the type survives, the namespace value is gone.
+- Move instance-method calls to free functions (`c.isMap()` → `isMap(c)`,
+  `c.toText()` → `expectText(c)`, …) - the value keeps only
+  `toData()`/`toHex()`/`toString()`.
+- Errors: `errorToString(e)`/`errorMsg(e)` → `e.message`;
+  `e.errorType.type` → `e.code`; `e.errorType.<field>` → `e.details.<field>`;
+  `new CborError({ type })` → `CborError.<factory>()`.
+- Containers: `CborMap.new()/insert/containsKey/len` →
+  `new CborMap()/set/has/size`; `CborSet.insert/contains/fromArray` →
+  `add/has/from`; `CborMap.get` returns the stored `Cbor` node.
+- Fix the two shapes that throw: plain `{tag, value}` object literals and
+  `taggedCbor()`-only objects (see below).
+- Optionally adopt `tryDecode()` (non-throwing) and
+  `decodeWith(bytes, codec)` (typed decode, `@beta`).
 
 ---
 
@@ -41,7 +41,7 @@ and their options types), `@blockchaincommons/dcbor/walk` (`walk`, `Visitor`, `W
 `@blockchaincommons/dcbor/debug` (`installDebugHooks()` - opt-in diagnostic-flavored console
 output). `bytesToHex`/`hexToBytes` stay at the root.
 
-## 2. Two input shapes now throw (transitional, one rc cycle)
+## 2. Two input shapes now throw
 
 These previously mapped to tagged values SILENTLY; changing that quietly
 would corrupt bytes, so they throw a directive `CborError` (code `Custom`):

@@ -237,8 +237,8 @@ describe("CborError", () => {
       }
     });
 
-    // Regression for C3: invalid UTF-8 must be rejected, not decoded to U+FFFD.
-    test("throws InvalidUtf8 for invalid UTF-8 text strings (C3)", () => {
+    // Invalid UTF-8 is rejected, not decoded to U+FFFD.
+    test("throws InvalidUtf8 for invalid UTF-8 text strings", () => {
       const badUtf8 = new Uint8Array([0x62, 0xc3, 0x28]);
       expect(() => decodeCbor(badUtf8)).toThrow(CborError);
       try {
@@ -249,7 +249,7 @@ describe("CborError", () => {
       expect(() => decodeCbor(new Uint8Array([0x61, 0xff]))).toThrow(CborError);
     });
 
-    // DCBOR-03: the message is the reference's `Utf8Error` Display, computed
+    // The message is the reference's `Utf8Error` Display, computed
     // from the bytes, not the host decoder's text. Every row was executed on
     // dcbor 0.25.2 (`CBOR::try_from_data(..).unwrap_err().to_string()`).
     test("InvalidUtf8 messages mirror core::str::Utf8Error", () => {
@@ -308,8 +308,7 @@ describe("CborError", () => {
       expect(c.value).toBe("é");
     });
 
-    // Regression for C4: interleaved-misordered map keys must be rejected.
-    test("throws MisorderedMapKey for interleaved-misordered map keys (C4)", () => {
+    test("throws MisorderedMapKey for interleaved-misordered map keys", () => {
       const interleaved = hexToBytes("a3010103030202");
       expect(() => decodeCbor(interleaved)).toThrow(CborError);
       try {
@@ -319,14 +318,14 @@ describe("CborError", () => {
       }
     });
 
-    test("accepts a canonically-ordered 3-key map (C4 control)", () => {
+    test("accepts a canonically-ordered 3-key map", () => {
       const ordered = hexToBytes("a3010102020303");
       expect(decodeCbor(ordered).type).toBe(5);
     });
 
-    // Regression for M3: a truncated inner item surfaces as Underrun even when
-    // the input is a sub-array of a larger ArrayBuffer.
-    test("does not read past the logical end of a sub-array input (M3)", () => {
+    // A truncated inner item is Underrun even when the input is a sub-array of
+    // a larger ArrayBuffer.
+    test("does not read past the logical end of a sub-array input", () => {
       const backing = hexToBytes("8201ffff");
       const logical = backing.subarray(0, 2); // only `82 01`
       expect(() => decodeCbor(logical)).toThrow(CborError);
@@ -337,7 +336,7 @@ describe("CborError", () => {
       }
     });
 
-    test("decodes a valid item that is a sub-array of a larger buffer (M3 control)", () => {
+    test("decodes a valid item that is a sub-array of a larger buffer", () => {
       const backing = hexToBytes("820102ffff");
       const logical = backing.subarray(0, 3); // `82 01 02`
       expect(decodeCbor(logical).type).toBe(4);

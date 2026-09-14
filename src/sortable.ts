@@ -31,8 +31,8 @@ export function sortArrayByCborEncoding<T extends CborInput>(array: readonly T[]
 }
 
 /**
- * Sortable-by-CBOR-encoding interface shape. The `arraySortable` /
- * `setSortable` helpers wrap any iterable into a `CBORSortable` view.
+ * A collection that can be sorted by CBOR encoding. `arraySortable` and
+ * `setSortable` wrap an array or a set in this interface.
  */
 export interface CBORSortable<T extends CborInput> {
   sortByCborEncoding(): T[];

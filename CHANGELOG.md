@@ -2,11 +2,9 @@
 
 ## Unreleased
 
-The divergence audit against `dcbor` 0.25.2 (bc-typescript `Docs/divergence`,
-tasks DCBOR-01 to DCBOR-15, TAGS-01 to TAGS-03 and COMP-01) closed every
-recorded and unrecorded behavioral difference the Rust harness can observe.
-The harness now runs in two builds (default and `num-bigint`) over five
-fixture files and its divergence allowlist is empty.
+Closes every behavioral difference from `dcbor` 0.25.2 that the Rust harness
+can observe. The harness now runs in two builds (default and `num-bigint`)
+over five fixture files, and its divergence allowlist is empty.
 
 ### Changed
 

@@ -1,5 +1,5 @@
 /**
- * Curated DATE corpus (DCBOR-12): `CborDate` decoding and display.
+ * Curated DATE corpus: `CborDate` decoding and display.
  *
  * - `decode` rows: tag-1 bytes -> `CborDate.fromTaggedCbor(decodeCbor(hex))`
  *   -> the re-encoded bytes and `toString()`, or the `CborError` code and

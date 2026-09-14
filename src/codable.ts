@@ -37,7 +37,7 @@ export interface CborTagged {
  * The codec value is the runtime witness that justifies the generic in
  * {@link decodeWith} - no unwitnessed casts.
  *
- * Ship-with exemplar: `CborDate.codec`.
+ * Example implementation: `CborDate.codec`.
  *
  * @beta
  */
@@ -70,7 +70,7 @@ export function decodeWith<T>(data: Uint8Array, codec: CborCodec<T>): T {
 }
 
 /**
- * Helper function to validate that a CBOR value has one of the expected tags.
+ * Validate that a CBOR value has one of the expected tags.
  *
  * @param cbor - CBOR value to validate
  * @param expectedTags - Array of valid tags
@@ -86,8 +86,6 @@ export const validateTag = (cbor: Cbor, expectedTags: Tag[]): Tag => {
   const tagValue = cbor.tag;
   const matchingTag = expectedTags.find((t) => tagValuesEqual(t.value, tagValue));
   if (matchingTag === undefined) {
-    // Produce the structured WrongTag variant rather than a stringly-typed
-    // Custom error so callers can branch on `error.code === "WrongTag"`.
     // Both tags keep their names, as the reference's `WrongTag(Tag, Tag)`
     // does: the expected one as `cborTags()` returned it, the actual one as
     // the node carries it (a decoded node carries no name).
@@ -98,7 +96,7 @@ export const validateTag = (cbor: Cbor, expectedTags: Tag[]): Tag => {
 };
 
 /**
- * Helper function to extract the content from a tagged CBOR value.
+ * Extract the content from a tagged CBOR value.
  *
  * @param cbor - Tagged CBOR value
  * @returns The untagged content

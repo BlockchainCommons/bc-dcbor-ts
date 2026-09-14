@@ -126,7 +126,7 @@ function main() {
     maxDepth: number;
   }
 
-  // P3: walk() returns void, so accumulate statistics in a closure-captured
+  // walk() returns void, so accumulate statistics in a closure-captured
   // object instead of threading them through the visitor state.
   const finalStats: Stats = {
     totalElements: 0,

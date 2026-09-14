@@ -1,8 +1,6 @@
 /**
- * Tests for CBOR bignum (tags 2 and 3) support.
- *
- * This file is a complete 1:1 translation of Rust's tests/num_bigint.rs.
- * All 57 unique test cases from the Rust version are translated here.
+ * Tests for CBOR bignum (tags 2 and 3) support, ported from Rust's
+ * tests/num_bigint.rs.
  */
 
 import { describe, it, expect } from "vitest";
@@ -527,7 +525,7 @@ describe("Encoding length", () => {
     // c2 41 01 = tag 2, 1-byte bstr, 0x01
     expect(one.toData().length).toBe(3);
 
-    // 2^64 should be tag + 9-byte length prefix + 9 bytes = 11 bytes
+    // 2^64: tag head + byte-string head + 9 content bytes = 11 bytes
     const big = biguintToCbor(1n << 64n);
     expect(big.toData().length).toBe(11);
   });
@@ -546,7 +544,6 @@ describe("Tag summarizer", () => {
     flat: true,
   };
 
-  // Register tags before summarizer tests
   it("summarizer positive bignum", () => {
     registerStandardTags(undefined, { bignum: true });
     const encoded = biguintToCbor(256n);

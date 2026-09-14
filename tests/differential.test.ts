@@ -1,12 +1,11 @@
 /**
- * Differential corpus harness (API_REDESIGN_PLAN P1.1b) - the mechanism that
- * proves the API redesign never changes the wire format.
+ * Differential corpus harness: the working tree against a baseline build.
  *
  * Every recipe in the ~93k combinatorial corpus (tests/corpus/corpus.ts) is
- * materialized and encoded TWICE: once with the frozen baseline bundle
+ * materialized and encoded twice: once with the baseline bundle
  * (tests/baseline/dcbor-baseline.mjs, built from the commit recorded in
  * tests/baseline/README.md) and once with the working tree (../src). The
- * encodings must be byte-identical - including which inputs throw, and with
+ * encodings must be byte-identical, including which inputs throw and with
  * which CborError code.
  *
  * Decode differential: on a deterministic stride, the encoded bytes plus
@@ -14,32 +13,23 @@
  * both builds; accept/reject outcome, re-encoded bytes, and error codes must
  * match exactly. The committed golden decode vectors also run through both.
  *
- * ## Tombstones (P3.5 / P3.7)
- *
- * When the breaking wave lands, the two flagged input shapes STOP encoding
- * and start throwing a directive error. Flip them here by adding the plan
- * task id to EXPECTED_TOMBSTONES - the harness then asserts
- * baseline-encodes → working-tree-throws for those categories, and byte
- * equality for everything else. That flip is the ONLY allowed differential
- * change during the redesign.
- *
- * ## When the public API is renamed (Phase 3)
- *
- * Write a new adapter for the redesigned surface in tests/vectors/recipes.ts
- * and point `current` below at it. The baseline keeps using `adapterFor`.
- * Recipes, corpus, and fixtures must NOT change.
+ * Deliberate behavior changes since the baseline are recognized by the
+ * `isKnown*Change` predicates below. Categories marked `tombstone` hold
+ * input shapes the baseline encoded and the working tree rejects; for those
+ * the harness asserts the directive error instead of byte equality.
  */
 
 import * as baselineMod from "./baseline/dcbor-baseline.mjs";
 import * as src from "../src";
 import {
-  adapterFor,
-  redesignedAdapterFor,
+  baselineAdapterFor,
+  currentAdapterFor,
   bytesToHex,
   decodeOutcome,
   encodeOutcome,
   hexToBytes,
   type Recipe,
+  type RemovedInputShape,
   type VectorApi,
 } from "./vectors/recipes";
 import { categories, corpusSize } from "./corpus/corpus";
@@ -48,30 +38,24 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Plan tasks whose tombstone throw has LANDED in the working tree, mapped to
- * the CborError code of the directive error they must throw. Pre-wave this
- * is empty. When P3.5 lands add e.g. `["P3.5", "Custom"]`; same for P3.7.
- * Do not add anything else, ever. (The directive error MUST be a CborError -
- * a non-CborError throw crashes the category loudly by design.)
+ * The CborError code each removed input shape throws. The directive error
+ * must be a CborError: a non-CborError throw fails the category loudly.
  */
-const EXPECTED_TOMBSTONES = new Map<"P3.5" | "P3.7", string>([
-  ["P3.5", "Custom"],
-  ["P3.7", "Custom"],
+const EXPECTED_TOMBSTONES = new Map<RemovedInputShape, string>([
+  ["tag-value-literal", "Custom"],
+  ["tagged-cbor-only", "Custom"],
 ]);
 
 type DecodeDiffOutcome = { ok: true; hex: string } | { ok: false; code: string; stage?: string };
 
 /**
- * Deliberate decode-behavior change landed AFTER the frozen baseline:
- * byte-string/text lengths >= 2^53 (bigint after narrowing) now report
- * `Underrun` like Rust's usize bounds check instead of the baseline's
- * `OutOfRange` input guard (`bc-dcbor-rust/src/decode.rs:110-115`, the
- * `parse_bytes` bounds check). Both builds still
- * reject; only the code differs. The baseline's decode stage raised
- * OutOfRange ONLY from that bigint-length guard (asserted by the golden
- * fixture hygiene test), so this exact code pair - and nothing else - is
- * the signature of the change. Fold into the baseline at the next
- * deliberate re-baseline.
+ * Decode-behavior change since the baseline: byte-string/text lengths >= 2^53
+ * (bigint after narrowing) report `Underrun`, like the reference's
+ * `parse_bytes` bounds check, instead of the baseline's `OutOfRange` input
+ * guard. Both builds reject; only the code differs. The baseline's decode
+ * stage raised OutOfRange only from that bigint-length guard (asserted by the
+ * golden fixture hygiene test), so this exact code pair - and nothing else -
+ * is the signature of the change.
  */
 const isKnownLengthCodeChange = (base: DecodeDiffOutcome, cur: DecodeDiffOutcome): boolean =>
   !base.ok &&
@@ -82,13 +66,12 @@ const isKnownLengthCodeChange = (base: DecodeDiffOutcome, cur: DecodeDiffOutcome
   cur.code === "Underrun";
 
 /**
- * Deliberate decode-behavior change landed AFTER the frozen baseline: a text
- * string starting with U+FEFF keeps that code point (Rust `String::from_utf8`
- * parity; the baseline used the WHATWG TextDecoder default, which strips a
- * leading BOM, so its re-encode dropped the three bytes). Signature: both
- * builds accept, the working tree re-encodes the input byte-identically, the
- * baseline does not, and the input carries the UTF-8 BOM sequence. See
- * RUST_DIVERGENCES.md.
+ * Decode-behavior change since the baseline: a text string starting with
+ * U+FEFF keeps that code point (Rust `String::from_utf8` parity; the baseline
+ * used the WHATWG TextDecoder default, which strips a leading BOM, so its
+ * re-encode dropped the three bytes). Signature: both builds accept, the
+ * working tree re-encodes the input byte-identically, the baseline does not,
+ * and the input carries the UTF-8 BOM sequence.
  */
 const isKnownBomKeepChange = (
   input: Uint8Array,
@@ -101,17 +84,17 @@ const isKnownBomKeepChange = (
 };
 
 /**
- * Deliberate decode-behavior change landed AFTER the frozen baseline
- * (DCBOR-05): whole-valued f32/f64 heads at or beyond the saturating-cast
- * bounds (`fa4f000001`, `fa4f800000`, `fb43e0000000000001`, …) are accepted
- * as the reference's `validate_canonical_f32/f64` accept them, and decode to
- * the integer node `From<f32/f64>` builds. The baseline's re-encode check
- * rejected every such head as NonCanonicalNumeric. Signature: baseline
- * rejects at the decode stage with that code, the working tree either
- * accepts or fails LATER in the input with a different decode-stage code
- * (a corruption mutation appends bytes after the head: the baseline stops at
- * the head, the working tree reads past it and reports UnusedData), and the
- * input carries a single- or double-precision head byte.
+ * Decode-behavior change since the baseline: whole-valued f32/f64 heads at or
+ * beyond the saturating-cast bounds (`fa4f000001`, `fa4f800000`,
+ * `fb43e0000000000001`, …) are accepted as the reference's
+ * `validate_canonical_f32/f64` accept them, and decode to the integer node
+ * `From<f32/f64>` builds. The baseline's re-encode check rejected every such
+ * head as NonCanonicalNumeric. Signature: baseline rejects at the decode stage
+ * with that code, the working tree either accepts or fails later in the input
+ * with a different decode-stage code (a corruption mutation appends bytes
+ * after the head: the baseline stops at the head, the working tree reads past
+ * it and reports UnusedData), and the input carries a single- or
+ * double-precision head byte.
  */
 const isKnownWholeFloatAcceptChange = (
   input: Uint8Array,
@@ -125,11 +108,11 @@ const isKnownWholeFloatAcceptChange = (
   input.some((b) => b === 0xfa || b === 0xfb);
 
 /**
- * Deliberate encode-behavior change landed AFTER the frozen baseline
- * (DCBOR-09): `CborDate.fromEpochSeconds(NaN)` is the epoch, as the
- * reference's `from_timestamp` saturates it (`trunc() as i64` → 0), where the
- * baseline threw InvalidDate. Signature: the recipe holds a NaN `date`, the
- * baseline threw that code, the working tree encodes.
+ * Encode-behavior change since the baseline: `CborDate.fromEpochSeconds(NaN)`
+ * is the epoch, as the reference's `from_timestamp` saturates it
+ * (`trunc() as i64` → 0), where the baseline threw InvalidDate. Signature: the
+ * recipe holds a NaN `date`, the baseline threw that code, the working tree
+ * encodes.
  */
 const isKnownNanDateChange = (
   recipe: Recipe,
@@ -151,16 +134,16 @@ const isKnownDecodeChange = (
   isKnownWholeFloatAcceptChange(input, base, cur);
 
 /**
- * Integrity pin for the frozen baseline. Without this, an accidental
- * re-baseline (or a build/copy mishap) silently turns the differential into
- * a self-comparison that passes vacuously. Update ONLY at the deliberate
- * P4.1 proof re-baseline, together with tests/baseline/README.md.
+ * Integrity pin for the baseline. Without this, an accidental re-baseline (or
+ * a build/copy mishap) silently turns the differential into a
+ * self-comparison that passes vacuously. Update only when deliberately
+ * re-baselining, together with tests/baseline/README.md.
  */
 const BASELINE_SHA256 = "ffb0bf6acdafaf01fbb6360497f96cb0f821d4d602f6f343cddd507a302fb72c";
 const BASELINE_COMMIT = "187769a273176a2c6089fb412871226b6db1e795";
 
-const baseline: VectorApi = adapterFor(baselineMod as unknown as Record<string, unknown>);
-const current: VectorApi = redesignedAdapterFor(src as unknown as Record<string, unknown>);
+const baseline: VectorApi = baselineAdapterFor(baselineMod as unknown as Record<string, unknown>);
+const current: VectorApi = currentAdapterFor(src as unknown as Record<string, unknown>);
 
 /** Stride for the plain decode differential (encode bytes → both decoders). */
 const DECODE_STRIDE = 4;
@@ -203,7 +186,7 @@ describe("differential corpus: baseline vs working tree", () => {
     expect(digest, `baseline must be the build from ${BASELINE_COMMIT}`).toBe(BASELINE_SHA256);
   });
 
-  it("corpus has the exact expected size (~93k plan floor)", () => {
+  it("corpus has the exact expected size", () => {
     // Exact equality so a silently shrinking category can't hide inside the
     // floor. Editing the corpus deliberately => update this constant in the
     // same reviewed diff.
@@ -231,10 +214,10 @@ describe("differential corpus: baseline vs working tree", () => {
         const cur = encodeOutcome(current, recipe);
 
         if (tombstoned) {
-          // Post-wave: the working tree must throw the directive error (not
-          // just any error). Most of these encoded in the baseline; a few
-          // edge recipes (e.g. out-of-range number tags) threw there too -
-          // either way the tombstone throw must now win.
+          // The working tree must throw the directive error (not just any
+          // error). Most of these encoded in the baseline; a few edge recipes
+          // (e.g. out-of-range number tags) threw there too - either way the
+          // directive error must win.
           if (cur.ok) {
             report(name, `working tree still encodes (${outcomeStr(cur)}) - tombstone missing`);
           } else if (cur.code !== tombstoneCode) {

@@ -35,7 +35,7 @@ export {
   type CborMapType,
   type CborTaggedType,
   type CborSimpleType,
-  // The ONE structural conversion protocol accepted by `cbor()`.
+  // The structural conversion protocol accepted by `cbor()`.
   type ToCbor,
 } from "./cbor";
 

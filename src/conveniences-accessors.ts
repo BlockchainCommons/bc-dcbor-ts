@@ -69,9 +69,7 @@ export const asInteger = (cbor: Cbor): number | bigint | undefined => {
  *
  * Decoded byte strings are zero-copy views aliasing the input buffer -
  * mutating the input after decoding (or mutating the returned bytes) changes
- * the other side. Call `.slice()` first if you need an independent copy. This
- * is deliberate: the zero-copy decode performance profile is part of the
- * library's contract.
+ * the other side. Call `.slice()` first if you need an independent copy.
  *
  * @param cbor - CBOR value
  * @returns Byte string or undefined
@@ -232,10 +230,9 @@ export const arrayLength = (cbor: Cbor): number | undefined => {
  * Check if array is empty.
  *
  * @param cbor - CBOR value (must be array)
- * @returns True if empty, false if not empty, undefined if not array
+ * @returns True if empty; false if not empty or not an array (matching hasTag)
  */
 export const arrayIsEmpty = (cbor: Cbor): boolean => {
-  // A wrong major type returns plain `false` (matching hasTag).
   if (cbor.type !== MajorType.Array) {
     return false;
   }
@@ -266,10 +263,9 @@ export function mapValue(cbor: Cbor, key: CborInput): Cbor | undefined {
  *
  * @param cbor - CBOR value (must be map)
  * @param key - Map key
- * @returns True if key exists, false otherwise, undefined if not map
+ * @returns True if key exists; false otherwise or if not a map (matching hasTag)
  */
 export function mapHas(cbor: Cbor, key: CborInput): boolean {
-  // A wrong major type returns plain `false` (matching hasTag).
   if (cbor.type !== MajorType.Map) {
     return false;
   }
@@ -319,10 +315,9 @@ export const mapSize = (cbor: Cbor): number | undefined => {
  * Check if map is empty.
  *
  * @param cbor - CBOR value (must be map)
- * @returns True if empty, false if not empty, undefined if not map
+ * @returns True if empty; false if not empty or not a map (matching hasTag)
  */
 export const mapIsEmpty = (cbor: Cbor): boolean => {
-  // A wrong major type returns plain `false` (matching hasTag).
   if (cbor.type !== MajorType.Map) {
     return false;
   }
@@ -401,8 +396,7 @@ export const asTaggedValue = (cbor: Cbor): [Tag, Cbor] | undefined => {
   if (cbor.type !== MajorType.Tagged) {
     return undefined;
   }
-  // Resolve the canonical name (if any) via the global tags store rather
-  // than synthesizing a `tag-${value}` placeholder.
+  // The tag carries the global tags store's name for it, if any.
   const resolved = getGlobalTagsStore().tagForValue(cbor.tag);
   const tag: Tag = resolved ?? { value: cbor.tag };
   return [tag, cbor.value];

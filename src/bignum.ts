@@ -42,7 +42,7 @@ const TAG_3_NEGATIVE_BIGNUM = 3;
  *
  * @param bytes - The magnitude byte string to validate
  * @param isNegative - Whether this is for a negative bignum (tag 3)
- * @throws CborError with type NonCanonicalNumeric on validation failure
+ * @throws {CborError} `NonCanonicalNumeric` on validation failure
  */
 export function validateBignumMagnitude(bytes: Uint8Array, isNegative: boolean): void {
   if (isNegative) {
@@ -122,7 +122,7 @@ export function bytesToBigint(bytes: Uint8Array): bigint {
  *
  * @param value - A non-negative bigint (must be >= 0n)
  * @returns CBOR tagged value
- * @throws CborError with type OutOfRange if value is negative
+ * @throws {CborError} `OutOfRange` if value is negative
  */
 export function biguintToCbor(value: bigint): Cbor {
   if (value < 0n) {
@@ -170,8 +170,8 @@ export function bigintToCbor(value: bigint): Cbor {
  *
  * @param cbor - A CBOR value that should be a byte string
  * @returns Non-negative bigint
- * @throws CborError with type WrongType if not a byte string
- * @throws CborError with type NonCanonicalNumeric if encoding is non-canonical
+ * @throws {CborError} `WrongType` if not a byte string
+ * @throws {CborError} `NonCanonicalNumeric` if encoding is non-canonical
  */
 export function biguintFromUntaggedCbor(cbor: Cbor): bigint {
   if (cbor.type !== MajorType.ByteString) {
@@ -194,8 +194,8 @@ export function biguintFromUntaggedCbor(cbor: Cbor): bigint {
  *
  * @param cbor - A CBOR value that should be a byte string
  * @returns Negative bigint
- * @throws CborError with type WrongType if not a byte string
- * @throws CborError with type NonCanonicalNumeric if encoding is non-canonical
+ * @throws {CborError} `WrongType` if not a byte string
+ * @throws {CborError} `NonCanonicalNumeric` if encoding is non-canonical
  */
 export function bigintFromNegativeUntaggedCbor(cbor: Cbor): bigint {
   if (cbor.type !== MajorType.ByteString) {

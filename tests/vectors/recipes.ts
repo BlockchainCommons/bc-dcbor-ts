@@ -1,34 +1,32 @@
 /**
- * Build-agnostic construction recipes for the wire-format vector suites
- * (API_REDESIGN_PLAN P1.1).
+ * Build-agnostic construction recipes for the wire-format vector suites.
  *
- * A `Recipe` is a JSON-serializable description of a construction input -
- * everything `cbor()`/`cborData()` accepts today: JS primitives, bigints,
- * floats (including NaN/±Infinity/-0), strings, byte arrays, arrays, plain
- * objects, JS Map/Set, CborMap, CborSet, CborDate, ByteString, tagged values,
- * tag-2/3 bignums, and the two protocol shapes (`toCbor()` / `taggedCbor()`).
+ * A `Recipe` is a JSON-serializable description of a construction input: JS
+ * primitives, bigints, floats (including NaN/±Infinity/-0), strings, byte
+ * arrays, arrays, plain objects, JS Map/Set, CborMap, CborSet, CborDate,
+ * ByteString, tagged values, tag-2/3 bignums, and the protocol shapes
+ * (`toCbor()` / `taggedCbor()`).
  *
  * Recipes are materialized against a `VectorApi` adapter rather than a
- * concrete module, so the SAME recipe can be constructed with two different
- * builds of the library:
+ * concrete module, so the same recipe can be constructed with two builds of
+ * the library whose public APIs are spelled differently:
  *
- *   - the frozen baseline bundle (`tests/baseline/dcbor-baseline.mjs`,
- *     built from the pre-redesign commit recorded in tests/baseline/README.md)
- *   - the working tree (`../src`)
+ *   - the baseline bundle (`tests/baseline/dcbor-baseline.mjs`, see
+ *     tests/baseline/README.md), through {@link baselineAdapterFor}
+ *   - the working tree (`../src`), through {@link currentAdapterFor}
  *
- * That is what makes the differential harness (`tests/differential.test.ts`)
- * and the committed golden fixtures (`tests/vectors/*.json`) survive the API
- * redesign: when Phase 3 renames the public surface, ONLY the working-tree
- * adapter in `adapterFor` needs a sibling (write e.g. `redesignedAdapterFor`
- * against the new names and point the harnesses' `current` at it). The frozen
- * baseline keeps using `adapterFor` - its API never changes - and the recipes,
- * corpus, and fixtures stay byte-for-byte identical.
- *
- * IMPORTANT: recipe semantics are FROZEN. Never change how an existing recipe
- * kind materializes; add a new kind instead. The committed fixtures pair
- * recipes with expected bytes - changing materialization silently invalidates
- * the pairing.
+ * Recipe semantics are fixed: never change how an existing recipe kind
+ * materializes; add a new kind instead. The committed fixtures pair recipes
+ * with expected bytes, so changing materialization silently invalidates the
+ * pairing.
  */
+
+/**
+ * Input shapes the baseline encoded and the working tree rejects with a
+ * directive `CborError`. Corpus entries and fixtures carrying one are asserted
+ * to throw rather than to match the baseline's bytes.
+ */
+export type RemovedInputShape = "tag-value-literal" | "tagged-cbor-only";
 
 /** Integer/float/bigint carried as a decimal string so recipes are JSON-safe. */
 export type Recipe =
@@ -53,27 +51,27 @@ export type Recipe =
   /** CborMap of `count` entries `i -> "v" + i` (compact count-cliff form). */
   | { k: "intmap"; count: number }
   /**
-   * Plain JS object. Keys must NOT be array-index-like ("0", "17", …): JS
+   * Plain JS object. Keys must not be array-index-like ("0", "17", …): JS
    * enumerates those first in numeric order, silently reordering entries;
    * the materializer rejects them. Other keys keep insertion order.
    */
   | { k: "obj"; entries: [string, Recipe][] }
   /** JS Map (insertion order preserved; library sorts canonically). */
   | { k: "jsmap"; entries: [Recipe, Recipe][] }
-  /** JS Set (insertion order preserved; library does NOT sort JS sets). */
+  /** JS Set (insertion order preserved; library does not sort JS sets). */
   | { k: "jsset"; items: Recipe[] }
   /** CborMap populated via set() in entry order. */
   | { k: "map"; entries: [Recipe, Recipe][] }
-  /** CborSet.fromArray (canonical sort + dedup). */
+  /** CborSet built from the items (canonical sort + dedup). */
   | { k: "set"; items: Recipe[] }
-  /** toTaggedValue(tag, content); tag is a decimal string (may exceed 2^53). */
+  /** Tagged value; tag is a decimal string (may exceed 2^53). */
   | { k: "tagged"; tag: string; content: Recipe }
   /**
-   * Plain object literal shaped exactly `{tag, value}` - the key-sniffing
-   * input that P3.5 tombstones. Baseline encodes it as a tagged value.
+   * Plain object literal shaped exactly `{tag, value}`. The baseline encodes
+   * it as a tagged value; the working tree rejects it (`tag-value-literal`).
    */
   | { k: "tagobjlit"; tag: Recipe; content: Recipe }
-  /** CborDate.fromTimestamp(Number(seconds)). */
+  /** CborDate from epoch seconds, `Number(seconds)`. */
   | { k: "date"; seconds: string }
   /** CborDate.fromString(v). */
   | { k: "datestr"; v: string }
@@ -86,50 +84,50 @@ export type Recipe =
   /** Anonymous object implementing only `toCbor()` (ToCbor protocol). */
   | { k: "tocbor"; inner: Recipe }
   /**
-   * Anonymous object implementing only `taggedCbor()` - the protocol shape
-   * that P3.7 tombstones (auto-wrap of TaggedCborEncodable).
+   * Anonymous object implementing only `taggedCbor()`. The baseline
+   * auto-wrapped it; the working tree rejects it (`tagged-cbor-only`).
    */
   | { k: "taggedproto"; tag: string; inner: Recipe }
   /**
-   * Object implementing BOTH `taggedCbor()` and `toCbor()`, each producing
-   * observably different bytes - freezes the dispatch precedence
-   * (`taggedCbor` wins today; P3.7 makes `toCbor` the only protocol).
+   * Object implementing both `taggedCbor()` and `toCbor()`, each producing
+   * different bytes, so the encoding shows which one dispatch picked
+   * (`toCbor` in the working tree, `taggedCbor` in the baseline).
    */
   | { k: "bothproto"; tag: string; inner: Recipe }
   /**
    * Bare Simple/Float Cbor node `{isCbor, type: 7, value: {type: "Float"}}`
    * (no methods - exercises the attachMethods passthrough arm). This is the
-   * ONLY route into the float encoder's own reduction ladder: whole-valued
-   * plain numbers integer-reduce in cbor() dispatch long before f64CborData
-   * runs, so the frozen float quirks (fround negative-reduction collisions,
-   * f32-exact wholes >= 2^32 staying 0xfa floats) are observable only here.
+   * only route into the float encoder's own reduction ladder: whole-valued
+   * plain numbers integer-reduce in cbor() dispatch before f64CborData runs,
+   * so the float quirks (fround negative-reduction collisions, f32-exact
+   * wholes >= 2^32 staying 0xfa floats) are observable only here.
    */
   | { k: "floatsimple"; v: string }
   /** Bare methodless Unsigned Cbor node (attachMethods passthrough arm). */
   | { k: "rawuint"; v: string }
   /**
    * Bare methodless Text Cbor node holding `v` verbatim (no constructor
-   * normalization). Pins that NFC is applied at ENCODE time, as the reference
+   * normalization). Pins that NFC is applied at encode time, as the reference
    * does for `CBORCase::Text`: a decomposed string in the node still encodes
    * composed.
    */
   | { k: "rawtext"; v: string }
   /**
-   * Bare methodless Negative Cbor node storing the MAGNITUDE-to-encode
+   * Bare methodless Negative Cbor node storing the magnitude to encode
    * (semantic value is -1-v, mirroring the decoder's representation).
    */
   | { k: "rawnegmag"; v: string }
   /** Malformed bare Cbor node (ByteString type, non-Uint8Array value). */
   | { k: "rawbad" }
-  /** A Symbol input (unsupported by cbor() - frozen Custom throw). */
+  /** A Symbol input (unsupported by cbor() - throws Custom). */
   | { k: "symbol" }
-  /** A function input (unsupported by cbor() - frozen Custom throw). */
+  /** A function input (unsupported by cbor() - throws Custom). */
   | { k: "fn" }
   /**
-   * Object with `tag`/`value` INHERITED from its prototype plus own entries.
-   * The sniffing arm's outer trigger (`"tag" in value`) sees prototype
+   * Object with `tag`/`value` inherited from its prototype plus own entries.
+   * The `{tag, value}` check in cbor() (`"tag" in value`) sees prototype
    * properties but Object.keys does not, so this falls through to the
-   * plain-object→map branch - frozen boundary behavior for P3.5.
+   * plain-object→map branch and encodes only the own entries.
    */
   | { k: "protoobj"; protoEntries: [string, Recipe][]; ownEntries: [string, Recipe][] };
 
@@ -139,11 +137,11 @@ export type Recipe =
  * whatever the build's public API calls them.
  */
 export interface VectorApi {
-  /** Full construction + encode: today `cborData(input)`. Throws CborError. */
+  /** Full construction + encode. Throws CborError. */
   encode(input: unknown): Uint8Array;
-  /** Strict decode: today `decodeCbor(bytes)`. Throws CborError. */
+  /** Strict decode. Throws CborError. */
   decode(bytes: Uint8Array): unknown;
-  /** The polymorphic constructor: today `cbor(input)`. */
+  /** The polymorphic constructor, `cbor(input)`. */
   makeCbor(input: unknown): unknown;
   makeMap(entries: [unknown, unknown][]): unknown;
   makeSet(items: unknown[]): unknown;
@@ -158,12 +156,11 @@ export interface VectorApi {
 }
 
 /**
- * Adapter for the CURRENT (pre-redesign) public API. Works for both the
- * frozen baseline bundle and today's `../src`. When the Phase 3 renames land,
- * add a sibling adapter for the new surface and keep this one for the
- * baseline - do not edit this function's semantics.
+ * Adapter for the baseline bundle's public API (`cborData`, `toTaggedValue`,
+ * `CborSet.fromArray`, `CborDate.fromTimestamp`). Its semantics are fixed with
+ * the bundle.
  */
-export function adapterFor(mod: Record<string, unknown>): VectorApi {
+export function baselineAdapterFor(mod: Record<string, unknown>): VectorApi {
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const m = mod as any;
   return {
@@ -194,12 +191,10 @@ export function adapterFor(mod: Record<string, unknown>): VectorApi {
 }
 
 /**
- * Adapter for the REDESIGNED public API (post-P3 wave). The differential
- * harness's `current` side and the golden suite use this; the frozen
- * baseline keeps using {@link adapterFor}. Recipes, corpus, and fixtures
- * are IDENTICAL for both - only the spellings differ.
+ * Adapter for the working tree's public API. The differential harness's
+ * `current` side, the golden suite and the vector generator use it.
  */
-export function redesignedAdapterFor(mod: Record<string, unknown>): VectorApi {
+export function currentAdapterFor(mod: Record<string, unknown>): VectorApi {
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const m = mod as any;
   return {
@@ -326,7 +321,7 @@ export function materialize(recipe: Recipe, api: VectorApi): unknown {
     case "tagged":
       return api.makeTagged(tagFromString(recipe.tag), materialize(recipe.content, api));
     case "tagobjlit":
-      // Exactly the two own keys {tag, value} - the P3.5 sniffing shape.
+      // Exactly the two own keys {tag, value}.
       return { tag: materialize(recipe.tag, api), value: materialize(recipe.content, api) };
     case "date":
       return api.makeDate(Number(recipe.seconds));

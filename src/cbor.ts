@@ -72,7 +72,7 @@ export type {
  * the (deliberately tiny) instance-method set from {@link CborMethods}
  * attached. The constituent interfaces live in ./cbor-types.
  *
- * This is a TYPE-ONLY export. Construct values with `cbor(x)` and decode with
+ * A type-only export: construct values with `cbor(x)` and decode with
  * `decodeCbor(bytes)`.
  */
 export type Cbor = (
@@ -188,7 +188,7 @@ const CBOR_NULL = attachMethods({
  * (`cbor.rs`): two values are equal when they have the same major type and
  * equal contents, compared recursively.
  *
- * This is NOT "encode to the same bytes": a float node whose value is whole
+ * This is not "encode to the same bytes": a float node whose value is whole
  * (`Float(2.0)`, reachable through a bare node) encodes as the integer `2`
  * but is not equal to the integer node; a text node keeps the string it was
  * built from, so a decomposed `"é"` is not equal to the composed one although
@@ -550,7 +550,7 @@ export const encodeCbor = (value: CborInput): Uint8Array<ArrayBuffer> => {
 // ============================================================================
 
 /**
- * Construct a tagged value - the ONLY explicit tagged-value constructor.
+ * Construct a tagged value - the only explicit tagged-value constructor.
  *
  * @example
  * ```typescript

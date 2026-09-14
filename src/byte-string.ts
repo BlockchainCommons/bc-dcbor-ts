@@ -1,11 +1,5 @@
 /**
- * Byte string utilities for dCBOR.
- *
- * Represents a CBOR byte string (major type 2).
- *
- * `ByteString` is a wrapper around a byte array, optimized for use in CBOR
- * encoding and decoding operations. It provides a richer API for working with
- * byte data in the context of CBOR compared to using raw `Uint8Array` values.
+ * A mutable wrapper around a CBOR byte string (major type 2).
  *
  * In dCBOR, byte strings follow the general deterministic encoding rules:
  * - They must use definite-length encoding
@@ -67,7 +61,7 @@ export class ByteString {
    * const bytes1 = new ByteString(new Uint8Array([1, 2, 3, 4]));
    *
    * // From a number array
-   * const bytes2 = new ByteString(new Uint8Array([5, 6, 7, 8]));
+   * const bytes2 = new ByteString([5, 6, 7, 8]);
    * ```
    */
   constructor(data: Uint8Array | number[]) {
@@ -99,22 +93,14 @@ export class ByteString {
   }
 
   /**
-   * Returns a reference to the underlying byte data.
-   *
-   * @returns The raw bytes
+   * The underlying byte data. This is a live reference: mutations are
+   * visible to the `ByteString`; use `toUint8Array()` for a copy.
    *
    * @example
    * ```typescript
    * const bytes = new ByteString(new Uint8Array([1, 2, 3, 4]));
-   * assert.deepEqual(bytes.bytes, new Uint8Array([1, 2, 3, 4]));
-   *
-   * // You can use standard slice operations on the result
    * assert.deepEqual(bytes.bytes.slice(1, 3), new Uint8Array([2, 3]));
    * ```
-   */
-  /**
-   * The underlying byte data (LIVE reference - mutations are visible to the
-   * ByteString; use `toUint8Array()` for a copy).
    */
   get bytes(): Uint8Array {
     return this._data;
@@ -209,7 +195,7 @@ export class ByteString {
    *
    * @param cbor - CBOR value
    * @returns ByteString if successful
-   * @throws Error if the CBOR value is not a byte string
+   * @throws {CborError} `WrongType` if the CBOR value is not a byte string
    *
    * @example
    * ```typescript
@@ -222,7 +208,7 @@ export class ByteString {
    * try {
    *   ByteString.fromCbor(cborInt); // throws
    * } catch(e) {
-   *   // Error: Wrong type
+   *   // CborError with code "WrongType"
    * }
    * ```
    */

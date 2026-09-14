@@ -1,15 +1,9 @@
 /**
- * Format tests - 1:1 translation from Rust's tests/format.rs
+ * Format tests, ported from Rust's tests/format.rs: diagnostic notation
+ * (pretty, annotated, flat), summary, and hex (plain and annotated).
  *
- * Tests various formatting outputs including:
- * - Diagnostic notation (pretty, annotated, and flat)
- * - Summary format
- * - Hex encoding (plain and annotated)
- *
- * P3.8: the Display (`description`) and debug-string (`debug_description`)
- * surfaces were removed with no replacement; those assertions are gone.
- * Where the old expected description equalled the flat diagnostic, that
- * exact string is still asserted via the flat-diagnostic parameter.
+ * Rust's `description` and `debug_description` outputs have no TypeScript
+ * counterpart and are not asserted.
  */
 
 import type { CborInput } from "../src";
@@ -36,7 +30,7 @@ function hexToBytes(hexStr: string): Uint8Array {
 }
 
 // Compare one formatted output against its expectation; an empty expectation
-// just logs the actual output (matches the original helper's behavior).
+// just logs the actual output.
 function check(testName: string, label: string, actual: string, expected: string) {
   if (expected === "") {
     console.log(`${label}:`);
@@ -51,8 +45,7 @@ function check(testName: string, label: string, actual: string, expected: string
   expect(actual).toBe(expected);
 }
 
-// Main test runner function - matches Rust's run() function
-// P3.8: description (Display) and debug-string parameters removed.
+// Counterpart of Rust's `run()`, without the description and debug outputs.
 function run(
   testName: string,
   value: CborInput,
@@ -245,7 +238,6 @@ describe("format tests", () => {
   });
 
   test("format_tagged", () => {
-    // Create tagged CBOR: tag 100 with value "Hello"
     const tagged = taggedValue(100, "Hello");
     run(
       "format_tagged",
@@ -315,8 +307,6 @@ describe("format tests", () => {
       "d83183015829536f6d65206d7973746572696573206172656e2774206d65616e7420746f20626520736f6c7665642e82d902c3820158402b9238e19eafbc154b49ec89edd4e0fb1368e97332c6913b4beb637d1875824f3e43bd7fb0c41fb574f08ce00247413d3ce2d9466e0ccfa4a89b92504982710ad902c3820158400f9c7af36804ffe5313c00115e5a31aa56814abaa77ff301da53d48613496e9c51a98b36d55f6fb5634fdb0123910cfa4904f1c60523df41013dc3749b377900";
     const cborValue = decodeCbor(hexToBytes(encodedCborHex));
 
-    // P3.8: description (Display) and debug-string surfaces removed; the old
-    // expected description equalled the flat diagnostic asserted below.
     const diagnosticStr = `49(
     [
         1,
@@ -421,19 +411,15 @@ describe("format tests", () => {
         78 7b                           # text(123)
             4c6f72656d20697073756d20646f6c6f722073697420616d65742c20636f6e73656374657475722061646970697363696e6720656c69742c2073656420646f20656975736d6f642074656d706f7220696e6369646964756e74207574206c61626f726520657420646f6c6f7265206d61676e6120616c697175612e # "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."`;
 
-    // Assert the LIBRARY outputs directly. The value is decoded (its tags carry
-    // no name), so - exactly like Rust - the plain diagnostic path renders tag
-    // numbers (`1(...)`), while only the annotated path resolves `/ date /` and
-    // the summary renders `2021-02-24`.
+    // The decoded tags carry no name, so, as in Rust, the plain diagnostic
+    // prints tag numbers (`1(...)`), the annotated form resolves `/ date /` and
+    // the summary prints `2021-02-24`.
     expect(diagnostic(cborValue)).toBe(diagnosticStr);
     expect(diagnostic(cborValue, { annotate: true })).toBe(diagnosticAnnotated);
     expect(diagnostic(cborValue, { flat: true })).toBe(diagnosticFlat);
     expect(diagnostic(cborValue, { summarize: true })).toBe(summaryStr);
     expect(cborValue.toHex()).toBe(hex);
     expect(hexAnnotated(cborValue)).toBe(hexAnnotatedStr);
-    // P3.8: debug-string surface removed (old expected:
-    // 'tagged(300, map({...}))'); Display description equalled the flat
-    // diagnostic asserted above.
   });
 
   test("format_key_order", () => {
@@ -447,8 +433,6 @@ describe("format tests", () => {
     m.set("aa", 5);
     m.set([100], 6);
 
-    // P3.8: description (Display) and debug-string surfaces removed; the old
-    // expected description equalled the flat diagnostic asserted below.
     const diagnosticStr = `{
     10:
     1,
@@ -504,7 +488,7 @@ describe("format tests", () => {
   });
 });
 
-describe("float diagnostic matches Rust {:?} on exact decimal ties (DCBOR-06/07)", () => {
+describe("float diagnostic matches Rust {:?} on exact decimal ties", () => {
   // JS `String()` rounds an exact decimal tie to the even digit; Rust's
   // flt2dec rounds the magnitude up. Every expected string below was
   // executed on the reference (`format!("{:?}", f64)`).
@@ -557,9 +541,9 @@ describe("float diagnostic matches Rust {:?} on exact decimal ties (DCBOR-06/07)
   });
 });
 
-describe("byte-string notes treat every non-ASCII code point as printable (DCBOR-04)", () => {
-  // Rust's `is_printable(c: char)` sees whole code points; the old
-  // UTF-16-unit check dropped astral characters. Executed on dcbor 0.25.2.
+describe("byte-string notes treat every non-ASCII code point as printable", () => {
+  // Rust's `is_printable(c: char)` sees whole code points, so astral
+  // characters are printable too. Executed on dcbor 0.25.2.
   it("keeps astral characters in the note", () => {
     expect(hexAnnotated(cbor(hexToBytes("f09f9880")))).toBe(
       `44              # bytes(4)\n    f09f9880    # "😀"`,
@@ -579,10 +563,9 @@ describe("byte-string notes treat every non-ASCII code point as printable (DCBOR
   });
 });
 
-describe("text decoding keeps a leading U+FEFF (DCBOR-01)", () => {
-  // Rust's `String::from_utf8` preserves every code point; the WHATWG
-  // TextDecoder default silently strips a leading byte-order mark, which
-  // broke the decode -> re-encode round trip for `64efbbbf61`.
+describe("text decoding keeps a leading U+FEFF", () => {
+  // Rust's `String::from_utf8` preserves every code point, including a leading
+  // byte-order mark that the WHATWG TextDecoder strips by default.
   it("decodes a BOM-prefixed text string to the same bytes", () => {
     const decoded = decodeCbor(hexToBytes("64efbbbf61"));
     expect(decoded.type).toBe(3);
@@ -597,7 +580,7 @@ describe("text decoding keeps a leading U+FEFF (DCBOR-01)", () => {
   });
 });
 
-describe("diagnostic line breaking measures strings in UTF-8 bytes (review N1)", () => {
+describe("diagnostic line breaking measures strings in UTF-8 bytes", () => {
   // `diag.rs`: a group breaks when it contains a group, or its strings total
   // more than 20 *bytes*, or its greatest child does. Executed on the
   // reference for every row below.

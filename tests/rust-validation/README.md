@@ -38,8 +38,9 @@ explicitly named classes:
   (`Date::from_timestamp` on ±Infinity or on whole seconds outside chrono's
   range, probed with chrono's own `timestamp_opt` before the call).
 - **skipped** - JS-only inputs with no Rust analog (`Symbol`, function,
-  malformed bare node), tombstoned recipes, rows pinned to the other build,
-  and the bignum recipes in the default build.
+  malformed bare node), the rejected `{tag, value}` literal and
+  `taggedCbor()`-only shapes (fixtures marked `tombstone`), rows pinned to
+  the other build, and the bignum recipes in the default build.
 - **expected-divergence** - a documented TS↔Rust difference allowlisted by
   vector name in `expected_divergences()` in `src/main.rs`. The list is
   empty: every recorded divergence is closed. The mechanism stays so a

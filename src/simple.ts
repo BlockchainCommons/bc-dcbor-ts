@@ -79,8 +79,8 @@ export const isCborNaN = (simple: Simple): boolean =>
  * - `False` encodes as `0xf4`
  * - `True` encodes as `0xf5`
  * - `Null` encodes as `0xf6`
- * - `Float` values encode according to the IEEE 754 floating point rules,
- *   using the shortest representation that preserves precision.
+ * - `Float` values reduce to an integer when whole, otherwise encode in the
+ *   shortest IEEE 754 width that preserves the value.
  */
 export const simpleCborData = (simple: Simple): Uint8Array<ArrayBuffer> => {
   switch (simple.type) {
@@ -124,11 +124,9 @@ export const simpleEquals = (a: Simple, b: Simple): boolean => {
 /**
  * Hash a Simple value.
  *
- * This is a fast non-cryptographic hash (FNV-1a) used solely to drive
- * in-process hash tables and dedup. It is not part of the deterministic
- * CBOR wire format, which compares the encoded bytes, and it is not stable
- * across processes or implementations. Do not persist these hash values or
- * compare them externally.
+ * A non-cryptographic FNV-1a hash over the variant and float bits. It is
+ * not part of the wire format or of CBOR equality, and it is not stable
+ * across implementations; do not persist it.
  */
 export const simpleHash = (simple: Simple): number => {
   // FNV-1a hash.

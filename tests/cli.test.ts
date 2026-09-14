@@ -1,18 +1,10 @@
 /**
- * CLI Tests - Comparison with bc-dcbor-cli
+ * Compares output with the Rust `dcbor` CLI
+ * (https://github.com/BlockchainCommons/bc-dcbor-cli), whose tests these are
+ * based on.
  *
- * REQUIREMENTS:
- * These tests require the bc-dcbor-cli tool to be installed on your system.
- * The tests execute the actual dcbor CLI command to verify our TypeScript
- * implementation produces identical output to the Rust reference implementation.
- *
- * Installation:
- * cargo install bc-dcbor-cli
- *
- * To run these tests:
- * npm run test-cli
- *
- * Based on tests from: https://github.com/BlockchainCommons/bc-dcbor-cli
+ * Requires the CLI on PATH (`cargo install bc-dcbor-cli`). The file is
+ * excluded from the default test run in vitest.config.ts.
  */
 
 import { execSync } from "child_process";
@@ -79,7 +71,6 @@ function runDcborWithInput(args: string[], input: string): string {
  * Handles: numbers, strings, booleans, null, arrays, maps
  */
 function parseDiagnostic(input: string): CborInput {
-  // Trim whitespace
   input = input.trim();
 
   // Handle null
@@ -208,8 +199,6 @@ function toHex(value: CborInput): string {
  */
 function toDiagnostic(value: CborInput): string {
   const cborValue = cbor(value);
-  // P3.8: Cbor.toString() now returns `Cbor(0x…)`; flat diagnostic moved to
-  // diagnostic(c, { flat: true }) - identical string to the old toString().
   return diagnostic(cborValue, { flat: true });
 }
 
@@ -225,16 +214,13 @@ function toAnnotatedHex(value: CborInput): string {
  * Convert hex string to diagnostic notation
  */
 function hexToDiagnostic(hexStr: string): string {
-  // Remove any whitespace
   hexStr = hexStr.replace(/\s+/g, "");
 
-  // Convert hex to bytes
   const bytes = new Uint8Array(hexStr.length / 2);
   for (let i = 0; i < hexStr.length; i += 2) {
     bytes[i / 2] = parseInt(hexStr.substr(i, 2), 16);
   }
 
-  // Decode and convert to diagnostic
   const decoded = decodeCbor(bytes);
   return diagnostic(decoded, { flat: true });
 }

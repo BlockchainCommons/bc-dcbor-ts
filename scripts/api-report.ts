@@ -1,5 +1,5 @@
 /**
- * Public API report via @microsoft/api-extractor (P1.2).
+ * Public API report via @microsoft/api-extractor.
  *
  * Usage:
  *   bun scripts/api-report.ts --local   # (re)generate api/dcbor.api.md
@@ -7,9 +7,8 @@
  *
  * api-extractor requires a `.d.ts` entry point; tsdown emits `.d.mts`, so a
  * transient copy is made inside dist/ first. The committed report
- * (api/dcbor.api.md) is the reviewable record of the public surface -
- * "API deliberately unstable, wire frozen" is enforced by making every
- * surface change a visible diff here and in api/index.d.mts.
+ * (api/dcbor.api.md) is the reviewable record of the public surface: every
+ * surface change is a visible diff here and in api/index.d.mts.
  */
 
 import { copyFileSync, existsSync, rmSync } from "node:fs";

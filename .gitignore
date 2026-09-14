@@ -8,7 +8,7 @@ node_modules
 # Build artifacts
 dist
 coverage
-# Generated TypeDoc output; retain handwritten architecture notes.
+# Generated TypeDoc output
 /docs/*
 *.tsbuildinfo
 

@@ -1,20 +1,21 @@
 /**
- * Golden wire-vector suite (API_REDESIGN_PLAN P1.1a) - the committed,
- * hand-pinned freeze of the deterministic wire format.
+ * Golden wire-vector suite: the committed, hand-reviewed record of the
+ * deterministic wire format.
  *
  * Verifies the working tree against the committed fixtures:
- *   - tests/vectors/encode-vectors.json: construction recipe → expected bytes
- *     (or expected CborError code for inputs that throw)
- *   - tests/vectors/decode-vectors.json: bytes → accept (byte-identical
- *     re-encode) or reject with a specific CborError.code - covering every
- *     reachable decoder throw site, including the checkCanonicalEncoding
- *     re-encode rejections
+ *   - encode-vectors.json: construction recipe → expected bytes (or expected
+ *     CborError code for inputs that throw)
+ *   - decode-vectors.json: bytes → accept (re-encoded bytes) or reject with a
+ *     specific CborError code and message - covering every reachable decoder
+ *     throw site, including the checkCanonicalEncoding re-encode rejections
+ *   - format-vectors.json, date-vectors.json, uint-vectors.json: diagnostic
+ *     renderings, CborDate decode/display, and fixed-width unsigned extraction
  *
  * Unlike tests/golden.test.ts (vitest snapshots, auto-updatable with -u),
  * these fixtures only change through a deliberate run of
  * `bun run vectors:generate` - the diff is the reviewable record of any
- * wire-format change. During the API redesign the wire is FROZEN: any diff
- * here outside the two planned tombstone flips (P3.5 / P3.7) is a bug.
+ * wire-format change. The Rust harness (tests/rust-validation) checks the
+ * same fixtures against the reference.
  */
 
 import { createHash } from "node:crypto";
@@ -36,7 +37,7 @@ import {
 import { diagnostic } from "../src/diag";
 import { hexAnnotated } from "../src/dump";
 import {
-  redesignedAdapterFor,
+  currentAdapterFor,
   bytesToHex,
   decodeErrorMessage,
   decodeOutcome,
@@ -44,6 +45,7 @@ import {
   hexToBytes,
   materialize,
   type Recipe,
+  type RemovedInputShape,
 } from "./vectors/recipes";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -55,7 +57,7 @@ interface EncodeFixture {
     | { ok: true; hex: string; decodeRejects?: string }
     | { ok: true; byteLength: number; sha256: string; hexPrefix: string; decodeRejects?: string }
     | { ok: false; code: string };
-  tombstone?: "P3.5" | "P3.7";
+  tombstone?: RemovedInputShape;
 }
 
 interface DecodeFixture {
@@ -93,14 +95,6 @@ interface UintFixture {
   expect: { ok: true; value: string } | { ok: false; code: string };
 }
 
-/**
- * Tombstone flips that have LANDED (mirror of EXPECTED_TOMBSTONES in
- * differential.test.ts, but per-task so P3.5 and P3.7 can land separately).
- * A landed task's tombstone-marked fixtures must be regenerated to
- * expected-throw; un-landed ones must still encode.
- */
-const LANDED_TOMBSTONES = new Set<"P3.5" | "P3.7">(["P3.5", "P3.7"]);
-
 const loadFixtures = <T>(file: string): { count: number; vectors: T[] } =>
   JSON.parse(readFileSync(join(here, "vectors", file), "utf8")) as {
     count: number;
@@ -116,7 +110,7 @@ const { count: formatCount, vectors: formatVectors } =
 const { count: dateCount, vectors: dateVectors } = loadFixtures<DateFixture>("date-vectors.json");
 const { count: uintCount, vectors: uintVectors } = loadFixtures<UintFixture>("uint-vectors.json");
 
-const api = redesignedAdapterFor(src);
+const api = currentAdapterFor(src);
 
 const sha256 = (hex: string): string =>
   createHash("sha256").update(Buffer.from(hex, "hex")).digest("hex");
@@ -318,16 +312,9 @@ describe("golden vector fixture hygiene", () => {
     }
   });
 
-  it("tombstone fixtures match their landed/unlanded state", () => {
-    // Per-task flip: when P3.5 (or P3.7) lands, add it to LANDED_TOMBSTONES
-    // and regenerate - its marked fixtures must then be expected-throw while
-    // the other task's fixtures still encode.
+  it("tombstone fixtures all expect a throw", () => {
     for (const vector of encodeVectors.filter((v) => v.tombstone)) {
-      const landed = LANDED_TOMBSTONES.has(vector.tombstone as "P3.5" | "P3.7");
-      expect(
-        vector.expect.ok,
-        `${vector.name} (${vector.tombstone}) should ${landed ? "throw" : "encode"}`,
-      ).toBe(!landed);
+      expect(vector.expect.ok, `${vector.name} (${vector.tombstone}) should throw`).toBe(false);
     }
   });
 });

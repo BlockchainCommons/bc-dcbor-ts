@@ -83,8 +83,7 @@ class ByteReader {
  * @remarks Decoded byte strings are zero-copy views aliasing the input
  * buffer - mutating the input after decoding (or mutating the returned
  * bytes) changes the other side. Call `.slice()` first if you need an
- * independent copy. This is deliberate: the zero-copy decode performance
- * profile is part of the library's contract.
+ * independent copy.
  */
 export function decodeCbor(data: Uint8Array): Cbor {
   const reader = new ByteReader(data);
@@ -295,7 +294,7 @@ function readCbor(reader: ByteReader): Cbor {
     }
     case MajorType.Simple:
       // Float heads: the reference's `validate_canonical_f*` predicates decide
-      // acceptance and its `From<f*>` impls build the node - NOT a re-encode
+      // acceptance and its `From<f*>` impls build the node - not a re-encode
       // comparison. The two differ for whole-valued heads at or beyond the
       // saturating-cast bounds (2^31 for f32, 2^63 for f64): those are
       // accepted and reduce to integer nodes, so e.g. `fa4f000001` decodes to

@@ -1,5 +1,5 @@
 /**
- * Curated UNSIGNED-EXTRACTION corpus (DCBOR-12, COMP-01).
+ * Curated UNSIGNED-EXTRACTION corpus.
  *
  * Each row decodes `hex` and extracts it into a fixed-width unsigned
  * integer: `expectUnsigned(cbor, { width, wrapNegative: true })` here,

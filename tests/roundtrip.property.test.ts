@@ -1,10 +1,9 @@
 /**
- * Round-trip stability property test (REFACTOR_PLAN Phase 0.4).
+ * Round-trip stability property test.
  *
  * For any dCBOR-representable value, re-encoding the decoded bytes must produce
- * byte-identical output: encode(decode(encode(v))) === encode(v). This is the
- * strongest safety net for the encoder/decoder rewrite in later phases - it
- * exercises far more inputs than the hand-written vectors.
+ * byte-identical output: encode(decode(encode(v))) === encode(v). It exercises
+ * far more inputs than the hand-written vectors.
  *
  * Strings are restricted to printable ASCII so generated inputs are always
  * valid UTF-8 and in NFC (dedicated tests cover the UTF-8/NFC rejection paths);

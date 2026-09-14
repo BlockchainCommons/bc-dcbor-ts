@@ -26,7 +26,8 @@ function main() {
 
   const texts: string[] = [];
   walk(cborData, undefined, (element: WalkElement, _depth, _edge, _state: void) => {
-    // Now we can collect ALL text nodes with a simple pattern match!
+    // Map keys and values are also visited as single elements, so one check
+    // collects every text node.
     if (element.type === "single") {
       if (element.cbor.type === MajorType.Text) {
         texts.push(element.cbor.value as string);

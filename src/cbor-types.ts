@@ -34,11 +34,10 @@ export const MajorType = {
 export type MajorType = (typeof MajorType)[keyof typeof MajorType];
 
 /**
- * Numeric type that can be encoded in CBOR.
- *
- * Supports both standard JavaScript numbers and BigInt for large integers.
- * Numbers are automatically encoded as either unsigned or negative integers
- * depending on their value, following dCBOR canonical encoding rules.
+ * Numeric type that can be encoded in CBOR: a JavaScript `number` or a
+ * `bigint` for integers beyond the safe-integer range. Whole values encode as
+ * unsigned or negative integers; other numbers encode as floats, following
+ * dCBOR numeric reduction.
  *
  * @example
  * ```typescript
@@ -49,16 +48,14 @@ export type MajorType = (typeof MajorType)[keyof typeof MajorType];
 export type CborNumber = number | bigint;
 
 /**
- * Type for values that can be converted to CBOR.
- *
- * This is a comprehensive union type representing all values that can be encoded
- * as CBOR using the `cbor()` function. It includes:
- * - Already-encoded CBOR values (`Cbor`)
- * - Primitive types: numbers, bigints, strings, booleans, null, undefined
- * - Binary data: `Uint8Array`, `ByteString`
- * - Dates: `CborDate`
- * - Collections: `CborMap`, arrays, JavaScript `Map`, JavaScript `Set`
- * - Objects: Plain objects are converted to CBOR maps
+ * Values accepted by `cbor()`:
+ * - `Cbor` nodes
+ * - numbers, bigints, strings, booleans, null, undefined
+ * - `Uint8Array`, `ByteString`
+ * - `CborDate`
+ * - `CborMap`, arrays, JavaScript `Map` and `Set`
+ * - objects implementing `ToCbor`
+ * - plain objects, which become CBOR maps
  *
  * @example
  * ```typescript
@@ -172,9 +169,9 @@ export interface CborMethods {
   toString(): string;
 }
 
-// The `Cbor` union type is defined in ./cbor (where it merges with the `Cbor`
-// namespace value); it is imported above as a type-only reference so the
-// interfaces here can name it without a runtime dependency.
+// The `Cbor` union type is defined in ./cbor; it is imported above as a
+// type-only reference so the interfaces here can name it without a runtime
+// dependency.
 
 /**
  * The structural encode protocol: types that can convert themselves to CBOR.

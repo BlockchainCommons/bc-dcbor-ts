@@ -11,7 +11,7 @@ const typeBits = (t: MajorType): number => {
 /**
  * Write a CBOR head (major type + argument) straight into `writer`, avoiding
  * the intermediate `Uint8Array` that {@link encodeVarInt} allocates. This is
- * the encoder hot path (every node emits a head). It MUST stay byte-identical
+ * the encoder hot path (every node emits a head). It must stay byte-identical
  * to {@link encodeVarInt}; the golden vectors cover both.
  */
 export const writeVarInt = (writer: BufWriter, value: CborNumber, majorType: MajorType): void => {
@@ -40,8 +40,8 @@ export const writeVarInt = (writer: BufWriter, value: CborNumber, majorType: Maj
       writer.writeBigUint64(BigInt(n));
     }
   } else {
-    // See encodeVarInt: past MAX_SAFE_INTEGER the encoding collapses to the
-    // 9-byte u64 form (or OutOfRange above u64::MAX). BigInt keeps it lossless.
+    // Past MAX_SAFE_INTEGER the head is always the 9-byte u64 form
+    // (OutOfRange above u64::MAX). BigInt keeps the value lossless.
     const big = BigInt(value);
     if (big > U64_MAX) {
       throw CborError.outOfRange();
@@ -51,17 +51,20 @@ export const writeVarInt = (writer: BufWriter, value: CborNumber, majorType: Maj
   }
 };
 
+/**
+ * Encode a CBOR head (major type + argument) in its shortest form.
+ *
+ * @throws {CborError} `OutOfRange` for a negative, fractional, or
+ *   above-u64 argument.
+ */
 export const encodeVarInt = (value: CborNumber, majorType: MajorType): Uint8Array<ArrayBuffer> => {
-  // throw an error if the value is negative.
   if (value < 0) {
     throw CborError.outOfRange();
   }
-  // throw an error if the value is a number with a fractional part.
   if (typeof value === "number" && hasFractionalPart(value)) {
     throw CborError.outOfRange();
   }
   const type = typeBits(majorType);
-  // If the value is a `number` or a `bigint` that can be represented as a `number`, convert it to a `number`.
   if (isCborNumber(value) && value <= Number.MAX_SAFE_INTEGER) {
     value = Number(value);
     if (value <= 23) {
@@ -84,7 +87,7 @@ export const encodeVarInt = (value: CborNumber, majorType: MajorType): Uint8Arra
       view.setUint32(1, value);
       return new Uint8Array(buffer);
     } else {
-      // Fits in MAX_SAFE_INTEGER
+      // Above u32, within the safe-integer range: UInt64
       const buffer = new ArrayBuffer(9);
       const view = new DataView(buffer);
       view.setUint8(0, 0x1b | type);
@@ -92,12 +95,9 @@ export const encodeVarInt = (value: CborNumber, majorType: MajorType): Uint8Arra
       return new Uint8Array(buffer);
     }
   } else {
-    // Bigint branch - value is strictly greater than `Number.MAX_SAFE_INTEGER`,
-    // therefore strictly greater than `0xffffffff`. The CBOR encoding rule
-    // collapses to: 9 bytes total (header `0x1b | type` + 8 big-endian bytes)
-    // if the value fits in u64, otherwise `OutOfRange`. We must NOT use
-    // `Math.log2(Number(value))` here - `Number(value)` is lossy past 2^53
-    // and would mis-pick the encoding length for values near u64::MAX.
+    // Above MAX_SAFE_INTEGER (so above u32): the 9-byte u64 form if the value
+    // fits, otherwise OutOfRange. Compared as a bigint, since `Number(value)`
+    // is lossy here.
     const big = BigInt(value);
     if (big > U64_MAX) {
       throw CborError.outOfRange();
@@ -144,7 +144,7 @@ export const decodeVarIntData = (
       }
       offset += 8;
       break;
-    default: // no additional info
+    default: // 0-23: the argument is the additional info itself
       value = additionalInfo;
       break;
   }

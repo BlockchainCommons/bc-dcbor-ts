@@ -1,7 +1,5 @@
 /**
- * Date/time support for CBOR with tag(1) encoding.
- *
- * A CBOR-friendly representation of a date and time.
+ * Date/time support for CBOR with tag 1 encoding.
  *
  * The `CborDate` type holds an instant as whole seconds since the Unix epoch
  * plus nanoseconds - the same model as the reference's `chrono::DateTime` -
@@ -30,7 +28,7 @@ import { CborError } from "./error";
  * (−262143-01-01T00:00:00) and `MAX` (262142-12-31T23:59:59.999999999) as
  * Unix seconds. Beyond it `Date::from_timestamp` panics (`timestamp_opt(…)
  * .unwrap()`); here it is `InvalidDate`. JS `Date` reaches further (±8.64e12
- * s), so every accepted value also renders.
+ * s), so `toDate()` can represent every accepted value.
  */
 const MIN_TIMESTAMP_SECONDS = -8_334_601_228_800;
 const MAX_TIMESTAMP_SECONDS = 8_210_266_876_799;
@@ -161,28 +159,20 @@ function timestampParts(seconds: number): [whole: number, nanoseconds: number] {
   return [whole, nanoseconds];
 }
 
+let dateCodec: CborCodec<CborDate> | undefined;
+
 /**
- * A CBOR-friendly representation of a date and time.
+ * A UTC date and time, encoded as CBOR tag 1 (RFC 8949 epoch-based
+ * date/time).
  *
- * The `CborDate` type provides a wrapper around JavaScript's native `Date` that
- * supports encoding and decoding to/from CBOR with tag 1, following the CBOR
- * date/time standard specified in RFC 8949.
- *
- * When encoded to CBOR, dates are represented as tag 1 followed by a numeric
- * value representing the number of seconds since (or before) the Unix epoch
- * (1970-01-01T00:00:00Z). The numeric value can be a positive or negative
- * integer, or a floating-point value for dates with fractional seconds.
- *
- * # Features
- *
- * - Supports UTC dates with optional fractional seconds
- * - Provides convenient constructors for common date creation patterns
- * - Implements the `CborTagged` interface and the `ToCbor` protocol
- * - Supports arithmetic operations with durations and between dates
+ * The instant is held as whole seconds since the Unix epoch plus nanoseconds.
+ * On the wire it is tag 1 followed by the seconds since (or before)
+ * 1970-01-01T00:00:00Z: an integer for whole seconds, a float otherwise.
+ * Implements the `CborTagged` interface and the `ToCbor` protocol.
  *
  * @example
  * ```typescript
- * import { CborDate } from './date';
+ * import { CborDate } from "@blockchaincommons/dcbor";
  *
  * // Create a date from a timestamp (seconds since Unix epoch)
  * const date = CborDate.fromEpochSeconds(1675854714.0);
@@ -197,8 +187,6 @@ function timestampParts(seconds: number): [whole: number, nanoseconds: number] {
  * const decoded = CborDate.fromTaggedCbor(cborValue);
  * ```
  */
-let dateCodec: CborCodec<CborDate> | undefined;
-
 export class CborDate implements CborTagged {
   /** Debug label: `Object.prototype.toString` reports `[object CborDate]`. */
   // A prototype getter has zero per-instance cost; the readonly field the
@@ -222,10 +210,7 @@ export class CborDate implements CborTagged {
   /**
    * Creates a new `CborDate` from the given JavaScript `Date`.
    *
-   * This method creates a new `CborDate` instance by wrapping a
-   * JavaScript `Date`.
-   *
-   * @param dateTime - A `Date` instance to wrap
+   * @param dateTime - A `Date` instance
    *
    * @returns A new `CborDate` instance
    *
@@ -255,9 +240,8 @@ export class CborDate implements CborTagged {
   }
 
   /**
-   * Creates a new `CborDate` from year, month, and day components.
-   *
-   * This method creates a new `CborDate` with the time set to 00:00:00 UTC.
+   * Creates a new `CborDate` from year, month, and day components, at
+   * 00:00:00 UTC.
    *
    * @param year - The year component (e.g., 2023)
    * @param month - The month component (1-12)
@@ -316,11 +300,8 @@ export class CborDate implements CborTagged {
   }
 
   /**
-   * Creates a new `CborDate` from seconds since (or before) the Unix epoch.
-   *
-   * This method creates a new `CborDate` representing the specified number of
-   * seconds since the Unix epoch (1970-01-01T00:00:00Z). Negative values
-   * represent times before the epoch.
+   * Creates a new `CborDate` from seconds since the Unix epoch
+   * (1970-01-01T00:00:00Z); negative values are before the epoch.
    *
    * The value is split as the reference's `from_timestamp` splits it: whole
    * seconds by truncation toward zero, then the fraction in nanoseconds
@@ -469,12 +450,10 @@ export class CborDate implements CborTagged {
   }
 
   /**
-   * Returns the underlying JavaScript `Date` object.
+   * Returns a new JavaScript `Date` for this instant (millisecond precision;
+   * sub-millisecond digits are lost).
    *
-   * This method provides access to the wrapped JavaScript `Date`
-   * instance.
-   *
-   * @returns The wrapped `Date` instance
+   * @returns A new `Date` instance
    *
    * @example
    * ```typescript
@@ -557,18 +536,14 @@ export class CborDate implements CborTagged {
   }
 
   /**
-   * Implementation of the `CborTagged` interface for `CborDate`.
-   *
-   * This implementation specifies that `CborDate` values are tagged with CBOR tag 1,
-   * which is the standard CBOR tag for date/time values represented as seconds
-   * since the Unix epoch per RFC 8949.
+   * The CBOR tags for `CborDate`: tag 1, the RFC 8949 epoch-based date/time.
    *
    * The tag carries whatever name the global tags store has for 1 at the
    * time of the call (`tags_for_values` in the reference): `date` once
    * `registerStandardTags()` has run, otherwise none. That name is what a
    * `WrongTag` error prints as the expected tag.
    *
-   * @returns A vector containing tag 1
+   * @returns An array containing tag 1
    */
   cborTags(): Tag[] {
     return [getGlobalTagsStore().tagForValue(TAG_EPOCH_DATE_TIME) ?? Tag.from(TAG_EPOCH_DATE_TIME)];
@@ -667,7 +642,8 @@ export class CborDate implements CborTagged {
    *
    * @returns The decoded date
    *
-   * @throws Error if the CBOR value has the wrong tag or cannot be decoded
+   * @throws {CborError} `WrongType` if the value is not tagged, `WrongTag`
+   *   for a tag other than 1, or what `fromUntaggedCbor` throws for the content
    */
   fromTaggedCbor(cbor: Cbor): CborDate {
     const expectedTags = this.cborTags();
@@ -715,11 +691,8 @@ export class CborDate implements CborTagged {
   private static readonly EPOCH = new CborDate(0, 0);
 
   /**
-   * Implementation of the `toString` method for `CborDate`.
-   *
-   * This implementation provides a string representation of a `CborDate` in ISO-8601
-   * format. For dates with time exactly at midnight (00:00:00), only the date
-   * part is shown. For other times, a full date-time string is shown.
+   * The date in ISO-8601 format: only the date part when the time is exactly
+   * midnight (00:00:00), otherwise a date-time to the second with `Z`.
    *
    * @returns String representation in ISO-8601 format
    *
@@ -732,7 +705,7 @@ export class CborDate implements CborTagged {
    *
    * // A date with time will display as date and time
    * const date2 = CborDate.fromYmdHms(2023, 2, 8, 15, 30, 45);
-   * // Returns "2023-02-08T15:30:45.000Z"
+   * // Returns "2023-02-08T15:30:45Z"
    * console.log(date2.toString());
    * ```
    */

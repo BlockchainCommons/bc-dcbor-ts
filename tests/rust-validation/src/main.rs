@@ -247,8 +247,8 @@ fn materialize(recipe: &Value) -> Materialized {
                 other => other,
             }
         }
-        // Tombstoned input shapes (P3.5 `{tag, value}` sniffing, P3.7
-        // `taggedCbor`-only auto-wrap): their fixtures expect a TS directive
+        // Removed input shapes (a `{tag, value}` object literal, a
+        // `taggedCbor`-only object): their fixtures expect a TS directive
         // error and are skipped before materialization (see run_encode).
         "tagobjlit" | "taggedproto" => Skip("tombstoned JS-only input shape"),
         "date" => match date_from_timestamp(parse_f64(recipe["seconds"].as_str().unwrap())) {
@@ -290,8 +290,8 @@ fn materialize(recipe: &Value) -> Materialized {
         }
         // Protocol wrappers: byte-equivalent to their underlying values.
         "tocbor" => materialize(&recipe["inner"]),
-        // Post-P3.7 dispatch precedence: toCbor() wins over taggedCbor(),
-        // so bothproto encodes as the toCbor side's marker array.
+        // Dispatch precedence: toCbor() wins over taggedCbor(), so bothproto
+        // encodes as the toCbor side's marker array.
         "bothproto" => match materialize(&recipe["inner"]) {
             Mat(c) => Mat(vec![CBOR::from("toCbor-won"), c].into()),
             other => other,
@@ -424,10 +424,9 @@ fn run_encode(vectors: &[Value], tally: &mut Tally, divergences: &BTreeMap<&str,
         let name = vector["name"].as_str().unwrap();
         let expect = &vector["expect"];
 
-        // Post-P3 tombstones: fixtures marked with a plan-task tombstone that
-        // now expect a throw exercise TS-only directive errors (the {tag,
-        // value} sniffing removal and the taggedCbor auto-wrap removal) -
-        // there is no Rust analog to compare.
+        // Tombstone fixtures that expect a throw exercise TS-only directive
+        // errors (a `{tag, value}` object literal, a `taggedCbor`-only
+        // object) - there is no Rust analog to compare.
         if vector["tombstone"].is_string() && expect["ok"].as_bool() == Some(false) {
             tally.skipped += 1;
             continue;

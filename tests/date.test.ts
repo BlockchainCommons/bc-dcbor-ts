@@ -1,10 +1,7 @@
 /**
- * Regression tests for M2 - strict `CborDate.fromString` parsing.
- *
- * Mirrors Rust `Date::from_string`: accept only strict RFC-3339 date-times
- * (seconds + explicit Z/offset) or bare `YYYY-MM-DD` dates (UTC midnight);
- * reject everything else, including the lenient/engine-dependent forms the old
- * `new Date(value)` accepted.
+ * `CborDate` tests against Rust's `Date`: string parsing, the representable
+ * range, component constructors, the (seconds, nanoseconds) model, `WrongTag`
+ * naming and display.
  */
 
 import { describe, test, expect } from "vitest";
@@ -26,7 +23,7 @@ import {
 import { diagnostic } from "../src/diag";
 import { hexAnnotated } from "../src/dump";
 
-describe("M2: strict CborDate.fromString", () => {
+describe("strict CborDate.fromString", () => {
   test("accepts strict RFC-3339 date-times", () => {
     expect(() => CborDate.fromString("2023-02-08T15:30:45Z")).not.toThrow();
     expect(() => CborDate.fromString("2023-02-08T15:30:45.5Z")).not.toThrow();
@@ -73,12 +70,12 @@ describe("M2: strict CborDate.fromString", () => {
 
   test("round-trips a whole-second timestamp through encode", () => {
     const d = CborDate.fromString("2022-03-21T18:24:31Z");
-    // Same instant as Rust's encode_date-style vector.
+    // The instant of Rust's `format_date` vector.
     expect(d.epochSeconds).toBe(1647887071);
   });
 });
 
-describe("range: the reference's representable timestamps (review N2)", () => {
+describe("range: the reference's representable timestamps", () => {
   // chrono's NaiveDateTime::MIN / MAX as Unix seconds (executed on dcbor 0.25.2).
   const MIN = -8334601228800;
   const MAX = 8210266876799;
@@ -257,7 +254,7 @@ describe("fromDate follows `from_datetime`: exact milliseconds, chrono's range",
   });
 });
 
-describe("the (seconds, nanoseconds) model (DCBOR-08): chrono's instant, not one f64", () => {
+describe("the (seconds, nanoseconds) model: chrono's instant, not one f64", () => {
   // Every expected string/byte sequence below was executed on dcbor 0.25.2
   // (`Date::from_string` / `from_timestamp`, then `to_string()` and
   // `to_cbor_data()`).
@@ -293,7 +290,7 @@ describe("the (seconds, nanoseconds) model (DCBOR-08): chrono's instant, not one
     expect(CborDate.fromEpochSeconds(1.5).compare(CborDate.fromEpochSeconds(1.25))).toBe(1);
   });
 
-  test("sub-second rounding of the f64 wire value no longer moves the displayed second", () => {
+  test("sub-second rounding of the f64 wire value does not move the displayed second", () => {
     // 45.999999999 s: the f64 sum rounds up to …46.0 (that is the wire
     // value, on both sides), but the instant is still second 45.
     const d = CborDate.fromString("2023-12-25T10:30:45.999999999Z");
@@ -325,7 +322,7 @@ describe("the (seconds, nanoseconds) model (DCBOR-08): chrono's instant, not one
   });
 });
 
-describe("NaN saturates to the epoch, ±Infinity is InvalidDate (DCBOR-09, from_timestamp parity)", () => {
+describe("NaN saturates to the epoch, ±Infinity is InvalidDate (from_timestamp parity)", () => {
   const hexOf = (d: CborDate): string => bytesToHex(encodeCbor(d.toCbor()));
   test("construction", () => {
     const d = CborDate.fromEpochSeconds(NaN);
@@ -350,7 +347,7 @@ describe("NaN saturates to the epoch, ±Infinity is InvalidDate (DCBOR-09, from_
   });
 });
 
-describe("WrongTag names the expected and actual tags as the reference does (DCBOR-10)", () => {
+describe("WrongTag names the expected and actual tags as the reference does", () => {
   // Executed on dcbor 0.25.2: `Date::from_tagged_cbor` reports
   // `WrongTag(cbor_tags()[0], tag)`, where the expected tag's name comes from
   // the global store (`tags_for_values`) and the actual tag keeps the name it

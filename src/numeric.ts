@@ -4,7 +4,7 @@
  * ## The `number` / `bigint` contract
  *
  * dCBOR integers span `[-(2^64), 2^64)`, which exceeds JavaScript's safe
- * integer range (`±(2^53 − 1)`). The single, repo-wide rule is:
+ * integer range (`±(2^53 − 1)`). The rule is:
  *
  * - An integer that fits in the IEEE-754 **safe** range is represented as a
  *   `number`; anything larger (in magnitude) is a `bigint`.
@@ -13,8 +13,7 @@
  *   ones remain lossless `bigint`s.
  * - Encoding accepts either at the public edge and normalises once.
  *
- * Every module funnels its boundary logic through this file - nothing else
- * should hard-code `Number.MAX_SAFE_INTEGER`, `2^64`, etc.
+ * The integer range constants and the saturating float casts live here.
  *
  * @module numeric
  */

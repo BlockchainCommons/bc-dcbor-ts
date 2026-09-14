@@ -63,7 +63,8 @@ export const hexAnnotated = (cbor: Cbor, opts?: HexFormatOpts): string => {
     return Math.max(largest, item.formatFirstColumn().length);
   }, 0);
 
-  // Round up to nearest multiple of 4
+  // One less than the next multiple of 4 above the widest first column, as
+  // the reference's `hex_opt` computes it.
   const roundedNoteColumn = ((noteColumn + 4) & ~3) - 1;
 
   const lines = items.map((item) => item.format(roundedNoteColumn));

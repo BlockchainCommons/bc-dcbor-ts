@@ -2,9 +2,8 @@
  * Native-value extraction from CBOR.
  *
  * Provides {@link extractCbor}, which converts a CBOR value into its native
- * JavaScript equivalent. Kept as a small leaf module so that consumers needing
- * only extraction do not pull in the whole convenience surface, keeping the
- * module graph acyclic.
+ * JavaScript equivalent. A separate module so `CborMap` and `CborSet` can
+ * use it without importing the convenience surface.
  *
  * @module extract
  */
@@ -28,11 +27,9 @@ export type CborNative =
   number | bigint | string | boolean | null | Uint8Array | CborNative[] | CborMap | Cbor;
 
 /**
- * Extract native JavaScript value from CBOR.
- * Converts CBOR types to their JavaScript equivalents.
- *
- * Returns the closed union {@link CborNative}. Note the two asymmetries
- * documented there: maps come back as `CborMap` and tagged values as `Cbor`.
+ * Extract the native JavaScript value from a CBOR value, decoding it first
+ * when given bytes. Maps come back as `CborMap` and tagged values as `Cbor`
+ * (see {@link CborNative}).
  */
 export const extractCbor = (cbor: Cbor | Uint8Array): CborNative => {
   let c: Cbor;

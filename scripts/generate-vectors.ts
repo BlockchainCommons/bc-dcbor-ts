@@ -31,7 +31,7 @@ import * as src from "../src/index.ts";
 import { diagnostic } from "../src/diag.ts";
 import { hexAnnotated } from "../src/dump.ts";
 import {
-  redesignedAdapterFor,
+  currentAdapterFor,
   decodeErrorMessage,
   decodeOutcome,
   encodeOutcome,
@@ -46,7 +46,7 @@ import { dateCorpus } from "../tests/vectors/date-corpus.ts";
 import { uintCorpus } from "../tests/vectors/uint-corpus.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const api = redesignedAdapterFor(src);
+const api = currentAdapterFor(src);
 
 /** Above this many bytes, fixtures store a digest instead of full hex. */
 const DIGEST_THRESHOLD_BYTES = 512;
@@ -91,9 +91,8 @@ for (const entry of encodeCorpus) {
     // Round-trip lock: encoder output must decode and re-encode
     // byte-identically (dCBOR determinism). An output the decoder rejects is
     // pinned with `decodeRejects` instead of failing the run; no current
-    // fixture needs it (the bare-Float `0xfa` wholes it once pinned decode
-    // since DCBOR-05), but the escape hatch stays so a future quirk is
-    // frozen deliberately rather than silently.
+    // fixture needs it, but the escape hatch stays so such a quirk is
+    // recorded deliberately rather than silently.
     const back = decodeOutcome(api, hexToBytes(outcome.hex));
     let decodeRejects;
     if (!back.ok) {

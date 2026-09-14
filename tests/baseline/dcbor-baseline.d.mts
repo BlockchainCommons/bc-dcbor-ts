@@ -1,9 +1,8 @@
 /**
- * Type shim for the frozen pre-redesign baseline bundle (see README.md).
+ * Type shim for the baseline bundle (see README.md).
  *
- * Only the members the differential harness's adapter touches are declared.
- * These signatures are FROZEN with the bundle: the baseline never changes
- * (except at a deliberate P4.1 re-baseline), so this file never drifts.
+ * Only the members the differential harness's adapter and the hex property
+ * tests touch are declared. The signatures change only with the bundle.
  */
 
 export declare function cborData(value: unknown): Uint8Array;

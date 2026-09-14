@@ -1,10 +1,9 @@
 /**
- * Golden wire-format snapshots (REFACTOR_PLAN Phase 0.3).
+ * Golden wire-format snapshots.
  *
- * Encodes a broad corpus of values and snapshots the resulting hex. Any change
- * to the deterministic wire format - the thing the refactor must NOT alter -
- * shows up as a snapshot diff. Also asserts each value round-trips
- * byte-identically through decode + re-encode.
+ * Encodes a broad corpus of values and snapshots the resulting hex, so any
+ * change to the deterministic wire format shows up as a snapshot diff. Also
+ * asserts each value round-trips byte-identically through decode + re-encode.
  */
 
 import { cbor, encodeCbor, decodeCbor, CborMap, taggedValue } from "../src";

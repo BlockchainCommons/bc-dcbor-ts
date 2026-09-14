@@ -2,8 +2,7 @@
  * Exact-conversion tests - 1:1 port of Rust's `src/exact.rs` `mod tests`.
  *
  * The `Exact*` helpers underpin dCBOR's numeric reduction (float→int and
- * width-narrowing) and were previously untested on the TypeScript side. Each
- * case asserts the same boundary behavior as the reference: exact integers
+ * width-narrowing). Each case asserts the same boundary behavior as the reference: exact integers
  * convert, fractional/NaN/Infinity/out-of-range inputs reject (undefined), and
  * float round-trips use the same saturating-cast semantics as Rust's `as`.
  *
