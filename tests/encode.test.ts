@@ -706,8 +706,8 @@ describe("encode tests", () => {
     });
   });
 
-  // Nesting is bounded only by the host stack on both
-  // sides (RUST_DIVERGENCES.md §1.3); 1,000 levels must work everywhere.
+  // Nesting is bounded only by the host stack on both sides; 1,000 levels
+  // must work everywhere.
   test("a 1,000-deep array decodes, re-encodes identically and renders", () => {
     const depth = 1000;
     const bytes = new Uint8Array(depth + 1);

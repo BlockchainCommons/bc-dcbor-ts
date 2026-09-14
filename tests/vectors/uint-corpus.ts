@@ -5,7 +5,7 @@
  * integer: `expectUnsigned(cbor, { width, wrapNegative: true })` here,
  * `u8`/`u16`/`u32`/`u64::try_from(CBOR)` in the Rust harness. The
  * reference wraps a negative integer whose magnitude fits the width
- * (RUST_DIVERGENCES.md §1.6) and rejects everything else with
+ * (RUST_DIVERGENCES.md §1.1) and rejects everything else with
  * `OutOfRange`; non-integers are `WrongType`.
  */
 

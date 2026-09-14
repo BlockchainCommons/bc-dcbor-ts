@@ -62,7 +62,7 @@ over five fixture files, and its divergence allowlist is empty.
 
 - `expectUnsigned(cbor, { width, wrapNegative })` extracts into a fixed
   width like `u8`…`u64::try_from`, including the reference's wrap of a
-  negative integer (`-1` → `255` at width 8; RUST_DIVERGENCES.md §1.6).
+  negative integer (`-1` → `255` at width 8; RUST_DIVERGENCES.md §1.1).
   Without options the behaviour is unchanged.
 - `TagsStore.clone()` mirrors `#[derive(Clone)]`: an independent copy that
   shares frozen tags and summarizer functions.

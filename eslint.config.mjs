@@ -149,7 +149,7 @@ export default [
   // Executable entry points inside a library: these run in Node.js and are
   // expected to use process, console and friends.
   {
-    files: ["src/bin/**/*.ts", "src/cmd/**/*.ts", "src/cli.ts", "src/main.ts"],
+    files: ["src/main.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {

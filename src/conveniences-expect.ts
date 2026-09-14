@@ -38,7 +38,7 @@ export interface ExpectUnsignedOptions {
    * a value `v` in [−2^width, −1] yields `2^width + v` (so −1 is 255 at
    * width 8), and a value below −2^width is `OutOfRange`. Off by default:
    * without it a negative node is `WrongType`, as for every other type. See
-   * RUST_DIVERGENCES.md §1.6.
+   * RUST_DIVERGENCES.md §1.1.
    */
   readonly wrapNegative?: boolean | undefined;
 }

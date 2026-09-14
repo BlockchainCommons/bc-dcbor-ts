@@ -99,8 +99,7 @@ export function decodeCbor(data: Uint8Array): Cbor {
  * Decode without throwing: returns a {@link Result} carrying the decoded value,
  * or the {@link CborError} that {@link decodeCbor} would have thrown. Non-CBOR
  * errors still propagate - including the host's `RangeError` when a deeply
- * nested input exhausts the call stack (the reference aborts there; see
- * RUST_DIVERGENCES.md §1.3).
+ * nested input exhausts the call stack (the reference aborts there too).
  *
  * The `try` prefix means "returns `Result`, never throws" - everywhere in
  * this library.
