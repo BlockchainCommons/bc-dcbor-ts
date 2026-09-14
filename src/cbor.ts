@@ -386,7 +386,7 @@ export const cbor = (value: CborInput): Cbor => {
     // Directive error: objects implementing taggedCbor() are not auto-wrapped.
     // Auto-wrapping would change bytes for structural call sites, so throw.
     throw CborError.custom(
-      "objects implementing taggedCbor() are no longer auto-wrapped by cbor(); " +
+      "objects implementing taggedCbor() are not auto-wrapped by cbor(); " +
         "implement toCbor() (e.g. `toCbor() { return this.taggedCbor(); }`)",
     );
   } else if (typeof value === "object" && "tag" in value && "value" in value) {
@@ -396,7 +396,7 @@ export const cbor = (value: CborInput): Cbor => {
       // it could be a tagged value or a legitimate data record like
       // {tag: "release", value: 3}. Refuse it rather than guess.
       throw CborError.custom(
-        "plain { tag, value } objects are ambiguous and no longer encode as tagged values; " +
+        "plain { tag, value } objects are ambiguous and do not encode as tagged values; " +
           "use taggedValue(tag, content) for a tagged value, or add/rename a key to encode a map",
       );
     }

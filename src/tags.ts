@@ -1,38 +1,13 @@
 /**
- * Standard CBOR tag definitions from the IANA registry.
- *
- * This module defines the tag constants the library itself needs - most
- * importantly the date and bignum tags - along with helpers to register them
- * in a tags store and to resolve tag values to {@link Tag} objects.
+ * The tags the library itself defines - date (1) and the bignums (2, 3), as
+ * the reference's `tags.rs` - with helpers to register them in a tags store
+ * and to resolve tag values to {@link Tag} objects.
  *
  * @module tags
  * @see https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
  */
 
 import { Tag } from "./tag";
-
-// ============================================================================
-// Standard Date/Time Tags
-// ============================================================================
-
-/**
- * Tag 0: Standard date/time string (RFC 3339)
- */
-export const TAG_DATE_TIME_STRING = 0;
-
-/**
- * Tag 1: Epoch-based date/time (seconds since 1970-01-01T00:00:00Z)
- */
-export const TAG_EPOCH_DATE_TIME = 1;
-
-/**
- * Tag 100: Epoch-based date (days since 1970-01-01)
- */
-export const TAG_EPOCH_DATE = 100;
-
-// ============================================================================
-// Numeric Tags
-// ============================================================================
 
 /**
  * Tag 2: Positive bignum (unsigned arbitrary-precision integer)
@@ -54,102 +29,6 @@ export const TAG_NAME_POSITIVE_BIGNUM = "positive-bignum";
  */
 export const TAG_NAME_NEGATIVE_BIGNUM = "negative-bignum";
 
-/**
- * Tag 4: Decimal fraction [exponent, mantissa]
- */
-export const TAG_DECIMAL_FRACTION = 4;
-
-/**
- * Tag 5: Bigfloat [exponent, mantissa]
- */
-export const TAG_BIGFLOAT = 5;
-
-// ============================================================================
-// Encoding Hints
-// ============================================================================
-
-/**
- * Tag 21: Expected conversion to base64url encoding
- */
-export const TAG_BASE64URL = 21;
-
-/**
- * Tag 22: Expected conversion to base64 encoding
- */
-export const TAG_BASE64 = 22;
-
-/**
- * Tag 23: Expected conversion to base16 encoding
- */
-export const TAG_BASE16 = 23;
-
-/**
- * Tag 24: Encoded CBOR data item
- */
-export const TAG_ENCODED_CBOR = 24;
-
-// ============================================================================
-// URI and Network Tags
-// ============================================================================
-
-/**
- * Tag 32: URI (text string)
- */
-export const TAG_URI = 32;
-
-/**
- * Tag 33: base64url-encoded text
- */
-export const TAG_BASE64URL_TEXT = 33;
-
-/**
- * Tag 34: base64-encoded text
- */
-export const TAG_BASE64_TEXT = 34;
-
-/**
- * Tag 35: Regular expression (PCRE/ECMA262)
- */
-export const TAG_REGEXP = 35;
-
-/**
- * Tag 36: MIME message
- */
-export const TAG_MIME_MESSAGE = 36;
-
-/**
- * Tag 37: Binary UUID
- */
-export const TAG_UUID = 37;
-
-// ============================================================================
-// Reference / UUID / Set Tags
-// ============================================================================
-
-/**
- * Tag 256: string reference (namespace)
- */
-export const TAG_STRING_REF_NAMESPACE = 256;
-
-/**
- * Tag 257: binary UUID reference
- */
-export const TAG_BINARY_UUID = 257;
-
-/**
- * Tag 258: Set of values (array with no duplicates)
- */
-export const TAG_SET = 258;
-
-// ============================================================================
-// Self-describing CBOR
-// ============================================================================
-
-/**
- * Tag 55799: Self-describe CBOR (magic number 0xd9d9f7)
- */
-export const TAG_SELF_DESCRIBE_CBOR = 55799;
-
 // ============================================================================
 // Global Tags Store Registration
 // ============================================================================
@@ -161,7 +40,14 @@ import { CborError } from "./error";
 import { type Cbor } from "./cbor";
 import { biguintFromUntaggedCbor, bigintFromNegativeUntaggedCbor } from "./bignum";
 
+/**
+ * Tag 1: Epoch-based date/time (seconds since 1970-01-01T00:00:00Z)
+ */
 export const TAG_DATE = 1;
+
+/**
+ * Name for tag 1 (date).
+ */
 export const TAG_NAME_DATE = "date";
 
 /** Options for {@link registerStandardTags}. */

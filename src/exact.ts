@@ -53,6 +53,9 @@ export class ExactI16 {
   static readonly MIN = -32768;
   static readonly MAX = 32767;
 
+  // The reference's `exact_from_f16` for i16 excludes -32768 (`source <=
+  // -32768.0`), although binary16 represents it; the f32 and f64 forms
+  // accept it. Kept identical (RUST_DIVERGENCES.md §2).
   static exactFromF16(source: number): number | undefined {
     return intFromFloatNum(source, -32768.0, 32768.0);
   }

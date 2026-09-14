@@ -673,48 +673,9 @@ export const Tag: {
 };
 
 // @public
-export const TAG_BASE16 = 23;
-
-// @public
-export const TAG_BASE64 = 22;
-
-// @public
-export const TAG_BASE64_TEXT = 34;
-
-// @public
-export const TAG_BASE64URL = 21;
-
-// @public
-export const TAG_BASE64URL_TEXT = 33;
-
-// @public
-export const TAG_BIGFLOAT = 5;
-
-// @public
-export const TAG_BINARY_UUID = 257;
-
-// @public (undocumented)
 export const TAG_DATE = 1;
 
 // @public
-export const TAG_DATE_TIME_STRING = 0;
-
-// @public
-export const TAG_DECIMAL_FRACTION = 4;
-
-// @public
-export const TAG_ENCODED_CBOR = 24;
-
-// @public
-export const TAG_EPOCH_DATE = 100;
-
-// @public
-export const TAG_EPOCH_DATE_TIME = 1;
-
-// @public
-export const TAG_MIME_MESSAGE = 36;
-
-// @public (undocumented)
 export const TAG_NAME_DATE = "date";
 
 // @public
@@ -728,24 +689,6 @@ export const TAG_NEGATIVE_BIGNUM = 3;
 
 // @public
 export const TAG_POSITIVE_BIGNUM = 2;
-
-// @public
-export const TAG_REGEXP = 35;
-
-// @public
-export const TAG_SELF_DESCRIBE_CBOR = 55799;
-
-// @public
-export const TAG_SET = 258;
-
-// @public
-export const TAG_STRING_REF_NAMESPACE = 256;
-
-// @public
-export const TAG_URI = 32;
-
-// @public
-export const TAG_UUID = 37;
 
 // @public
 export const tagContent: (cbor: Cbor) => Cbor | undefined;

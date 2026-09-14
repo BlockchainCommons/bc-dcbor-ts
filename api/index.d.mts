@@ -49,8 +49,7 @@ export declare function decodeCbor(data: Uint8Array): Cbor;
  * Decode without throwing: returns a {@link Result} carrying the decoded value,
  * or the {@link CborError} that {@link decodeCbor} would have thrown. Non-CBOR
  * errors still propagate - including the host's `RangeError` when a deeply
- * nested input exhausts the call stack (the reference aborts there; see
- * RUST_DIVERGENCES.md §1.3).
+ * nested input exhausts the call stack (the reference aborts there too).
  *
  * The `try` prefix means "returns `Result`, never throws" - everywhere in
  * this library.
@@ -191,18 +190,6 @@ export declare class CborSet {
 //#endregion
 //#region src/tags.d.ts
 /**
- * Tag 0: Standard date/time string (RFC 3339)
- */
-export declare const TAG_DATE_TIME_STRING = 0;
-/**
- * Tag 1: Epoch-based date/time (seconds since 1970-01-01T00:00:00Z)
- */
-export declare const TAG_EPOCH_DATE_TIME = 1;
-/**
- * Tag 100: Epoch-based date (days since 1970-01-01)
- */
-export declare const TAG_EPOCH_DATE = 100;
-/**
  * Tag 2: Positive bignum (unsigned arbitrary-precision integer)
  */
 export declare const TAG_POSITIVE_BIGNUM = 2;
@@ -219,70 +206,12 @@ export declare const TAG_NAME_POSITIVE_BIGNUM = "positive-bignum";
  */
 export declare const TAG_NAME_NEGATIVE_BIGNUM = "negative-bignum";
 /**
- * Tag 4: Decimal fraction [exponent, mantissa]
+ * Tag 1: Epoch-based date/time (seconds since 1970-01-01T00:00:00Z)
  */
-export declare const TAG_DECIMAL_FRACTION = 4;
-/**
- * Tag 5: Bigfloat [exponent, mantissa]
- */
-export declare const TAG_BIGFLOAT = 5;
-/**
- * Tag 21: Expected conversion to base64url encoding
- */
-export declare const TAG_BASE64URL = 21;
-/**
- * Tag 22: Expected conversion to base64 encoding
- */
-export declare const TAG_BASE64 = 22;
-/**
- * Tag 23: Expected conversion to base16 encoding
- */
-export declare const TAG_BASE16 = 23;
-/**
- * Tag 24: Encoded CBOR data item
- */
-export declare const TAG_ENCODED_CBOR = 24;
-/**
- * Tag 32: URI (text string)
- */
-export declare const TAG_URI = 32;
-/**
- * Tag 33: base64url-encoded text
- */
-export declare const TAG_BASE64URL_TEXT = 33;
-/**
- * Tag 34: base64-encoded text
- */
-export declare const TAG_BASE64_TEXT = 34;
-/**
- * Tag 35: Regular expression (PCRE/ECMA262)
- */
-export declare const TAG_REGEXP = 35;
-/**
- * Tag 36: MIME message
- */
-export declare const TAG_MIME_MESSAGE = 36;
-/**
- * Tag 37: Binary UUID
- */
-export declare const TAG_UUID = 37;
-/**
- * Tag 256: string reference (namespace)
- */
-export declare const TAG_STRING_REF_NAMESPACE = 256;
-/**
- * Tag 257: binary UUID reference
- */
-export declare const TAG_BINARY_UUID = 257;
-/**
- * Tag 258: Set of values (array with no duplicates)
- */
-export declare const TAG_SET = 258;
-/**
- * Tag 55799: Self-describe CBOR (magic number 0xd9d9f7)
- */
-export declare const TAG_SELF_DESCRIBE_CBOR = 55799;
 export declare const TAG_DATE = 1;
+/**
+ * Name for tag 1 (date).
+ */
 export declare const TAG_NAME_DATE = "date";
 /** Options for {@link registerStandardTags}. */
 interface RegisterStandardTagsOptions {
@@ -773,7 +702,7 @@ interface ExpectUnsignedOptions {
    * a value `v` in [−2^width, −1] yields `2^width + v` (so −1 is 255 at
    * width 8), and a value below −2^width is `OutOfRange`. Off by default:
    * without it a negative node is `WrongType`, as for every other type. See
-   * RUST_DIVERGENCES.md §1.6.
+   * RUST_DIVERGENCES.md §1.1.
    */
   readonly wrapNegative?: boolean | undefined;
 }

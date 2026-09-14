@@ -98,6 +98,19 @@ reference does not. Covered by `tests/hex.property.test.ts`.
 
 ---
 
+## 2. Reference quirks the port reproduces
+
+### 2.1 `i16::exact_from_f16` excludes -32768
+
+The reference's `exact_from_f16` for `i16` tests `source <= -32768.0`
+(`exact.rs`), so `-32768.0`, which binary16 represents exactly, is `None`,
+while `exact_from_f32(-32768.0)` and `exact_from_f64(-32768.0)` are
+`Some(-32768)`. `ExactI16.exactFromF16(-32768)` is `undefined` to match;
+`tests/exact.test.ts` pins it. Nothing on the wire depends on it. Reported
+upstream (issue link pending).
+
+---
+
 ## Maintenance
 
 - **Adding vectors:** a vector that diverges from Rust is a bug to fix,

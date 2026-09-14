@@ -40,6 +40,11 @@ describe("Exact conversions (port of Rust exact.rs tests)", () => {
     expect(ExactI16.exactFromF16(NaN)).toBeUndefined();
     expect(ExactI16.exactFromF16(Infinity)).toBeUndefined();
     expect(ExactI16.exactFromF16(-Infinity)).toBeUndefined();
+    // The reference excludes i16::MIN from the f16 form only.
+    expect(ExactI16.exactFromF16(-32768)).toBeUndefined();
+    expect(ExactI16.exactFromF16(32767)).toBe(32767);
+    expect(ExactI16.exactFromF32(-32768)).toBe(-32768);
+    expect(ExactI16.exactFromF64(-32768)).toBe(-32768);
 
     expect(ExactI16.exactFromF32(21.0)).toBe(21);
     expect(ExactI16.exactFromF32(21.5)).toBeUndefined();

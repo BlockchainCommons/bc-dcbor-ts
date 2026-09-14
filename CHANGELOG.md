@@ -72,6 +72,14 @@ over five fixture files, and its divergence allowlist is empty.
   run in CI. Guard tests for the engine's Unicode version and a 1,000-deep
   array.
 
+### Removed
+
+- The `TAG_*` constants with no counterpart in the reference (`TAG_UUID`,
+  `TAG_ENCODED_CBOR`, `TAG_SET`, `TAG_SELF_DESCRIBE_CBOR`, …; the reference
+  defines only `TAG_DATE`, `TAG_POSITIVE_BIGNUM` and `TAG_NEGATIVE_BIGNUM`).
+  `TAG_EPOCH_DATE_TIME` was a duplicate of `TAG_DATE`. `TAG_BINARY_UUID`
+  named IANA tag 257, which is the binary MIME message tag.
+
 ## 1.0.0-beta.2 - 2026-09-13
 
 The review against `dcbor` 0.25.2 aligned diagnostic formatting, date

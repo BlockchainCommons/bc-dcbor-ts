@@ -18,7 +18,7 @@ import { type Cbor } from "./cbor";
 import { MajorType } from "./cbor-types";
 import { cbor, taggedValue } from "./cbor";
 import { Tag } from "./tag";
-import { TAG_EPOCH_DATE_TIME } from "./tags";
+import { TAG_DATE } from "./tags";
 import { getGlobalTagsStore } from "./tags-store";
 import { type CborTagged, type CborCodec, validateTag, extractTaggedContent } from "./codable";
 import { CborError } from "./error";
@@ -546,7 +546,7 @@ export class CborDate implements CborTagged {
    * @returns An array containing tag 1
    */
   cborTags(): Tag[] {
-    return [getGlobalTagsStore().tagForValue(TAG_EPOCH_DATE_TIME) ?? Tag.from(TAG_EPOCH_DATE_TIME)];
+    return [getGlobalTagsStore().tagForValue(TAG_DATE) ?? Tag.from(TAG_DATE)];
   }
 
   /**

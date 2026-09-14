@@ -256,7 +256,8 @@ error code); the accessor names that already followed the grammar
 `mapKeys`, `mapValues`, `mapSize`, …); `extractCbor` (now typed
 `CborNative`); the bignum functions (tags 2/3); `encodeVarInt`/`decodeVarInt`;
 `sortArrayByCborEncoding`; `cborEquals`; `bytesToHex`/`hexToBytes` names;
-`getGlobalTagsStore` and all lookup names; the standard `TAG_*` constants;
+`getGlobalTagsStore` and all lookup names; `TAG_DATE`, `TAG_POSITIVE_BIGNUM`
+and `TAG_NEGATIVE_BIGNUM`;
 `CborDate`'s `fromYmd`/`fromYmdHms`/`fromString`/`now`/`add`/`subtract`/
 `difference`/`equals`/`compare`/`toString`/`toJSON`; `CborSet`'s algebra
 (`union`/`intersection`/`difference`/`isSubsetOf`/`isSupersetOf`); and
