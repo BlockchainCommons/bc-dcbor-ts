@@ -6,6 +6,8 @@ updates:
     schedule:
       interval: "weekly"
     labels: [ "dependencies" ]
+    allow:
+      - dependency-type: "production"
     groups:
       node:
         patterns:
