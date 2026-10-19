@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0-beta.5 - 2026-10-19
+
+### Fixed
+
+- `npm install` works on a host without Bun. The TypeScript 6 pin for the
+  lint tools runs from the `prepare` hook, not `postinstall`, so it no longer
+  runs when the package is installed as a dependency
+  ([bc-components-ts#11](https://github.com/BlockchainCommons/bc-components-ts/issues/11)).
+
 ## 1.0.0-beta.3 - 2026-09-14
 
 Closes the listed divergences below from `dcbor` 0.25.2;
