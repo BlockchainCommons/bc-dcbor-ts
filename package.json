@@ -97,7 +97,7 @@
     "api:check": "bun scripts/api-snapshot.ts --check && bun scripts/api-report.ts",
     "clean": "rm -rf dist",
     "docs": "typedoc",
-    "postinstall": "bun scripts/pin-lint-typescript.ts",
+    "prepare": "bun scripts/pin-lint-typescript.ts",
     "prepublishOnly": "npm run build",
     "lint:pkg": "publint && attw --pack . --profile node16",
     "check:deps": "node -e \"const d=require('./package.json').dependencies||{};const k=Object.keys(d);if(k.length){console.error('zero-dependency policy violated:',k);process.exit(1)}console.log('zero runtime dependencies')\""
